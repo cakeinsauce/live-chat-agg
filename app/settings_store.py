@@ -35,8 +35,10 @@ _STRING_KEYS = (
     "tiktok_sessionid",
     "tiktok_target_idc",
     "tts_voice",
+    "tts_engine",
+    "tts_neural_voice",
 )
-_BOOL_KEYS = ("tts_enabled",)
+_BOOL_KEYS = ("tts_enabled", "enable_test_messages", "tts_fallback_to_browser")
 _LIST_KEYS = ("templates",)
 _RUNTIME_KEYS = _STRING_KEYS + _BOOL_KEYS + _LIST_KEYS
 
@@ -113,6 +115,8 @@ _REQUIRED_MAP = {
     "twitch_channel": "TWITCH_CHANNEL",
     "tiktok_username": "TIKTOK_USERNAME",
     "tts_voice": "TTS_VOICE",
+    "tts_engine": "TTS_ENGINE",
+    "tts_neural_voice": "TTS_NEURAL_VOICE",
 }
 
 
@@ -129,6 +133,10 @@ def apply_runtime_settings(base: Settings, overrides: dict) -> Settings:
             updates[field] = value or None
     if "tts_enabled" in overrides:
         updates["TTS_ENABLED"] = _coerce_bool(overrides["tts_enabled"])
+    if "enable_test_messages" in overrides:
+        updates["ENABLE_TEST_MESSAGES"] = _coerce_bool(overrides["enable_test_messages"])
+    if "tts_fallback_to_browser" in overrides:
+        updates["TTS_FALLBACK_TO_BROWSER"] = _coerce_bool(overrides["tts_fallback_to_browser"])
     if "templates" in overrides:
         updates["TEMPLATES"] = _coerce_list(overrides["templates"])
     return base.model_copy(update=updates) if updates else base
@@ -146,6 +154,10 @@ def settings_to_runtime_dict(settings: Settings) -> dict:
         "tiktok_sessionid": settings.TIKTOK_SESSIONID or "",
         "tiktok_target_idc": settings.TIKTOK_TARGET_IDC or "",
         "tts_enabled": settings.TTS_ENABLED,
+        "tts_engine": settings.TTS_ENGINE or "browser",
         "tts_voice": settings.TTS_VOICE or "",
+        "tts_neural_voice": settings.TTS_NEURAL_VOICE or "",
+        "tts_fallback_to_browser": settings.TTS_FALLBACK_TO_BROWSER,
         "templates": list(settings.TEMPLATES or []),
+        "enable_test_messages": settings.ENABLE_TEST_MESSAGES,
     }

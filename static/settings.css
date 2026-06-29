@@ -342,3 +342,71 @@ select:focus {
 .template-add input[type="text"] {
   flex: 1;
 }
+
+.tts-panel {
+  margin-top: 4px;
+}
+
+.tts-panel.hidden {
+  display: none;
+}
+
+.voice-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.voice-row select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.btn-preview,
+.btn-refresh {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.inline-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.inline-check label {
+  display: inline;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.preview-error {
+  font-size: 13px;
+  color: var(--error);
+  margin-top: 6px;
+  display: none;
+}
+
+.preview-error:not(:empty) {
+  display: block;
+}
+
+.hint:empty {
+  display: none;
+}

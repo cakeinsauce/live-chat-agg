@@ -405,6 +405,7 @@
     let tplOpen = false;
     let emojiOpen = false;
     let sendInFlight = false;
+    let testInFlight = false;
 
     const composer = document.createElement("div");
     composer.className = "composer";
@@ -458,11 +459,17 @@
     sendBtn.className = "composer-send";
     sendBtn.textContent = "Send";
 
+    const testBtn = document.createElement("button");
+    testBtn.className = "composer-send composer-test";
+    testBtn.textContent = "Test";
+    testBtn.title = "Inject a test message (no live stream needed)";
+
     inner.appendChild(toggle);
     inner.appendChild(input);
     inner.appendChild(tplBtn);
     inner.appendChild(emojiBtn);
     inner.appendChild(sendBtn);
+    inner.appendChild(testBtn);
 
     const statusEl = document.createElement("div");
     statusEl.className = "composer-status";
@@ -612,7 +619,36 @@
         });
     }
 
+    function doTest() {
+      const text = input.value.trim();
+      if (!text || testInFlight) return;
+      testInFlight = true;
+      testBtn.disabled = true;
+
+      fetch("/api/test-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: currentPlatform, text, username: "" }),
+      })
+        .then((r) => {
+          if (!r.ok) return r.text().then((t) => { throw new Error(t || String(r.status)); });
+          return r.text();
+        })
+        .then(() => {
+          input.value = "";
+          showStatus("Test sent!", false);
+        })
+        .catch((err) => {
+          showStatus(err && err.message ? err.message : "Error", true);
+        })
+        .finally(() => {
+          testInFlight = false;
+          testBtn.disabled = false;
+        });
+    }
+
     sendBtn.addEventListener("click", doSend);
+    testBtn.addEventListener("click", doTest);
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); }
     });

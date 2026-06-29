@@ -39,13 +39,25 @@ class Settings(BaseSettings):
     TIKTOK_SESSIONID: Optional[str] = None
     TIKTOK_TARGET_IDC: Optional[str] = None
 
-    # Text-to-speech is rendered client-side (Web Speech API); these are just
-    # the persisted user preferences forwarded to the overlay.
+    # Text-to-speech. TTS_ENABLED is the hard kill-switch checked before any
+    # engine is consulted. The "browser" engine renders client-side via the Web
+    # Speech API (TTS_VOICE = a speechSynthesis voice name). The "neural" engine
+    # synthesizes server-side via edge-tts (TTS_NEURAL_VOICE = an edge-tts voice
+    # id like "ru-RU-SvetlanaNeural"); on neural failure TTS_FALLBACK_TO_BROWSER
+    # decides whether to silently skip the line or retry through the browser voice.
     TTS_ENABLED: bool = False
+    TTS_ENGINE: str = "browser"  # "browser" | "neural"
     TTS_VOICE: str = ""
+    TTS_NEURAL_VOICE: str = "ru-RU-SvetlanaNeural"
+    TTS_FALLBACK_TO_BROWSER: bool = False
 
     # Quick-send message templates editable from the settings page.
     TEMPLATES: List[str] = []
+
+    # When no real connector is configured the overlay can be fed synthetic demo
+    # chat so the layout/TTS can be exercised before going live. Off by default
+    # so a freshly-launched, unconfigured instance shows an empty chat, not fakes.
+    ENABLE_TEST_MESSAGES: bool = False
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000

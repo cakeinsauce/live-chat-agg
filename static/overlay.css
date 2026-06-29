@@ -527,6 +527,15 @@ body.has-composer .chat {
 .composer-send:active { transform: translateY(1px); }
 .composer-send:disabled { opacity: 0.38; cursor: not-allowed; }
 
+.composer-test {
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.92);
+}
+body.bg-light .composer-test {
+  background: rgba(0, 0, 0, 0.1);
+  color: #111;
+}
+
 .composer-status {
   position: absolute;
   bottom: calc(100% + 4px);

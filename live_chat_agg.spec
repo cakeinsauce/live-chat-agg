@@ -13,6 +13,11 @@ hiddenimports = [
     "app.server",
     "app.launcher",
     "app.desktop",
+    "app.tts_neural",
+    "edge_tts",
+    "edge_tts.communicate",
+    "certifi",
+    "charset_normalizer",
     "PySide6.QtCore",
     "PySide6.QtGui",
     "PySide6.QtWidgets",
@@ -38,6 +43,7 @@ _COLLECT_ALL_PKGS = [
     "anyio",
     "click",
     "PySide6",
+    "edge_tts",
 ]
 
 for pkg in _COLLECT_ALL_PKGS:
@@ -108,8 +114,8 @@ if IS_DARWIN:
         info_plist={
             "CFBundleName": "Live Chat Aggregator",
             "CFBundleDisplayName": "Live Chat Aggregator",
-            "CFBundleShortVersionString": "3.0.0",
-            "CFBundleVersion": "3.0.0",
+            "CFBundleShortVersionString": "3.1.0",
+            "CFBundleVersion": "3.1.0",
             "NSHighResolutionCapable": True,
             "LSBackgroundOnly": False,
         },

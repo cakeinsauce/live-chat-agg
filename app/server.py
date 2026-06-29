@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -20,8 +20,9 @@ from .config import Settings, get_settings
 from .connectors.tiktok import TikTokConnector
 from .connectors.twitch import TwitchConnector
 from .connectors.twitch_helix import TwitchHelixPoller
-from .models import ChatMessage
+from .models import ChatMessage, stable_color
 from .stats import StatsState
+from . import tts_neural
 from .settings_store import (
     apply_runtime_settings,
     load_runtime_settings,
@@ -56,7 +57,7 @@ async def _fake_publisher(bus: EventBus) -> None:
                 user_id=f"demo-{platform}",
                 username=f"Demo{platform.capitalize()}",
                 text=f"Fake message #{i} from {platform}",
-                color="#9146FF" if platform == "twitch" else "#25F4EE",
+                color="#7B68EE" if platform == "twitch" else "#6495ED",
                 timestamp=time.time(),
             )
         )
@@ -84,8 +85,8 @@ def build_connector_tasks(
         connectors["tiktok"] = tiktok
         tasks.append(supervise("tiktok", tiktok.run))
 
-    if not tasks:
-        log.warning("no connectors configured; running fake publisher")
+    if not tasks and settings.ENABLE_TEST_MESSAGES:
+        log.warning("no connectors configured; running test-message publisher")
         tasks.append(supervise("fake", lambda: _fake_publisher(bus)))
 
     return tasks, connectors
@@ -123,13 +124,28 @@ class RuntimeSettingsPayload(BaseModel):
     tiktok_sessionid: str = ""
     tiktok_target_idc: str = ""
     tts_enabled: bool = False
+    tts_engine: str = "browser"
     tts_voice: str = ""
+    tts_neural_voice: str = ""
+    tts_fallback_to_browser: bool = False
     templates: list[str] = []
+    enable_test_messages: bool = False
 
 
 class SendPayload(BaseModel):
     platform: str
     text: str
+
+
+class TestMessagePayload(BaseModel):
+    platform: str = "twitch"
+    text: str = ""
+    username: str = ""
+
+
+class TtsSynthesizePayload(BaseModel):
+    text: str = ""
+    voice: str = ""
 
 
 class BlockPayload(BaseModel):
@@ -153,6 +169,13 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
         app.state.settings = settings
         app.state.config_dir = config_dir
         app.state.connector_lock = asyncio.Lock()
+        # Optional neural TTS engine: created only when edge-tts is installed.
+        # Stays None otherwise so the /api/tts endpoints degrade to 503.
+        app.state.tts_neural = None
+        if tts_neural.is_available():
+            engine = tts_neural.NeuralTTSEngine()
+            engine.start()
+            app.state.tts_neural = engine
         stats.start()
         coros, connectors = build_connector_tasks(bus, settings, stats)
         app.state.connector_tasks = [asyncio.create_task(coro) for coro in coros]
@@ -163,6 +186,8 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
         finally:
             await _cancel_tasks(app.state.connector_tasks)
             await stats.stop()
+            if app.state.tts_neural is not None:
+                await app.state.tts_neural.aclose()
             log.info("connector tasks stopped")
 
     app = FastAPI(lifespan=lifespan)
@@ -241,6 +266,60 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
             log.warning("send via %s failed: %s", body.platform, exc)
             raise HTTPException(status_code=502, detail=f"send failed: {exc}") from exc
         return {"status": "ok"}
+
+    @app.post("/api/test-message")
+    async def api_test_message(body: TestMessagePayload):
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text is empty")
+        platform = "tiktok" if body.platform == "tiktok" else "twitch"
+        username = body.username.strip() or "Tester"
+        user_id = f"test-{platform}-{username.lower()}"
+        # TikTok colors are per-user derived; Twitch IRC supplies its own so we
+        # leave it to the overlay's platform accent (color=None) here.
+        color = stable_color(user_id) if platform == "tiktok" else None
+        await app.state.bus.publish(
+            ChatMessage(
+                platform=platform,
+                user_id=user_id,
+                username=username,
+                text=text,
+                color=color,
+                timestamp=time.time(),
+            )
+        )
+        return {"status": "ok"}
+
+    @app.post("/api/tts/synthesize")
+    async def api_tts_synthesize(body: TtsSynthesizePayload):
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text is empty")
+        voice = body.voice.strip() or app.state.settings.TTS_NEURAL_VOICE
+        engine = app.state.tts_neural
+        if engine is None:
+            raise HTTPException(status_code=503, detail="neural TTS is not available")
+        try:
+            audio = await engine.synthesize(text, voice)
+        except asyncio.QueueFull as exc:
+            raise HTTPException(status_code=503, detail="neural TTS is busy") from exc
+        except Exception as exc:
+            log.warning("neural TTS synth failed: %s", exc)
+            raise HTTPException(status_code=503, detail=f"neural TTS failed: {exc}") from exc
+        return Response(content=audio, media_type="audio/mpeg")
+
+    @app.get("/api/tts/voices")
+    async def api_tts_voices(engine: str = "neural"):
+        if engine != "neural":
+            return []
+        tts = app.state.tts_neural
+        if tts is None:
+            return []
+        try:
+            return await tts.list_voices("ru")
+        except Exception as exc:
+            log.warning("neural TTS voice list failed: %s", exc)
+            return []
 
     @app.post("/api/block")
     async def api_block(body: BlockPayload):

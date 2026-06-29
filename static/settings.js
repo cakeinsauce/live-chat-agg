@@ -19,10 +19,23 @@
   ];
 
   const ttsEnabledEl = document.getElementById("tts_enabled");
+  const ttsEngineEl = document.getElementById("tts_engine");
   const ttsVoiceEl = document.getElementById("tts_voice");
   const ttsVoiceHint = document.getElementById("tts-voice-hint");
+  const ttsNeuralVoiceEl = document.getElementById("tts_neural_voice");
+  const ttsFallbackEl = document.getElementById("tts_fallback_to_browser");
+  const ttsBrowserPanel = document.getElementById("tts-browser-panel");
+  const ttsNeuralPanel = document.getElementById("tts-neural-panel");
+  const browserPreviewBtn = document.getElementById("browser-preview-btn");
+  const neuralPreviewBtn = document.getElementById("neural-preview-btn");
+  const neuralRefreshBtn = document.getElementById("neural-refresh-btn");
+  const neuralVoiceHint = document.getElementById("neural-voice-hint");
+  const neuralPreviewError = document.getElementById("neural-preview-error");
+  const enableTestMessagesEl = document.getElementById("enable_test_messages");
 
   let savedTtsVoice = "";
+  let savedTtsNeuralVoice = "";
+  let neuralInFlight = false;
 
   const templateListEl = document.getElementById("template-list");
   const templateInputEl = document.getElementById("template-input");
@@ -33,7 +46,7 @@
     status.textContent = text;
     status.className = "status visible " + (kind || "");
     if (kind === "success") {
-      setTimeout(() => {
+      setTimeout(function () {
         if (status.textContent === text) {
           status.className = "status";
         }
@@ -46,6 +59,19 @@
     reconnectBtn.disabled = busy;
     saveBtn.textContent = busy ? "Saving…" : "Save & connect";
   }
+
+  function updateEnginePanel() {
+    var isNeural = ttsEngineEl.value === "neural";
+    ttsBrowserPanel.classList.toggle("hidden", isNeural);
+    ttsNeuralPanel.classList.toggle("hidden", !isNeural);
+  }
+
+  ttsEngineEl.addEventListener("change", function () {
+    updateEnginePanel();
+    if (ttsEngineEl.value === "neural") {
+      fetchNeuralVoices();
+    }
+  });
 
   function populateVoices() {
     if (!window.speechSynthesis) return;
@@ -76,7 +102,8 @@
       ruVoices.forEach(function (v) {
         var opt = document.createElement("option");
         opt.value = v.name;
-        opt.textContent = v.name + " (" + v.lang + ")";
+        var badge = v.localService ? "[Local]" : "[Remote]";
+        opt.textContent = v.name + " (" + v.lang + ") " + badge;
         ttsVoiceEl.appendChild(opt);
       });
     }
@@ -99,7 +126,7 @@
 
   if (window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = populateVoices;
-    populateVoices(); // Firefox already has voices; Chrome populates them asynchronously
+    populateVoices();
   } else {
     ttsVoiceEl.disabled = true;
     var unavailOpt = document.createElement("option");
@@ -107,6 +134,107 @@
     unavailOpt.textContent = "Speech synthesis not available in this browser";
     ttsVoiceEl.appendChild(unavailOpt);
   }
+
+  browserPreviewBtn.addEventListener("click", function () {
+    if (!window.speechSynthesis) return;
+    const voices = window.speechSynthesis.getVoices();
+    const selectedName = ttsVoiceEl.value;
+    var voice = null;
+    for (var i = 0; i < voices.length; i++) {
+      if (voices[i].name === selectedName) { voice = voices[i]; break; }
+    }
+    window.speechSynthesis.cancel();
+    var utt = new SpeechSynthesisUtterance("Привет, добро пожаловать на стрим!");
+    utt.lang = "ru-RU";
+    if (voice) utt.voice = voice;
+    window.speechSynthesis.speak(utt);
+  });
+
+  async function fetchNeuralVoices() {
+    try {
+      const res = await fetch("/api/tts/voices?engine=neural");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const voices = await res.json();
+
+      while (ttsNeuralVoiceEl.firstChild) {
+        ttsNeuralVoiceEl.removeChild(ttsNeuralVoiceEl.firstChild);
+      }
+
+      if (!Array.isArray(voices) || voices.length === 0) {
+        ttsNeuralVoiceEl.disabled = true;
+        neuralPreviewBtn.disabled = true;
+        neuralVoiceHint.textContent =
+          "Neural voices unavailable — install edge-tts and ensure internet access; falling back to browser voices.";
+        neuralVoiceHint.classList.add("warn");
+        return;
+      }
+
+      ttsNeuralVoiceEl.disabled = false;
+      neuralPreviewBtn.disabled = false;
+      neuralVoiceHint.textContent = "";
+      neuralVoiceHint.classList.remove("warn");
+
+      voices.forEach(function (v) {
+        var opt = document.createElement("option");
+        opt.value = v.id;
+        opt.textContent = v.name + " (" + v.locale + (v.gender ? ", " + v.gender : "") + ")";
+        ttsNeuralVoiceEl.appendChild(opt);
+      });
+
+      if (savedTtsNeuralVoice) {
+        ttsNeuralVoiceEl.value = savedTtsNeuralVoice;
+      }
+    } catch {
+      while (ttsNeuralVoiceEl.firstChild) {
+        ttsNeuralVoiceEl.removeChild(ttsNeuralVoiceEl.firstChild);
+      }
+      ttsNeuralVoiceEl.disabled = true;
+      neuralPreviewBtn.disabled = true;
+      neuralVoiceHint.textContent =
+        "Neural voices unavailable — install edge-tts and ensure internet access; falling back to browser voices.";
+      neuralVoiceHint.classList.add("warn");
+    }
+  }
+
+  neuralRefreshBtn.addEventListener("click", fetchNeuralVoices);
+
+  neuralPreviewBtn.addEventListener("click", async function () {
+    if (neuralInFlight) return;
+    const voiceId = ttsNeuralVoiceEl.value;
+    if (!voiceId) return;
+
+    neuralInFlight = true;
+    neuralPreviewBtn.disabled = true;
+    neuralPreviewError.textContent = "";
+
+    try {
+      const res = await fetch("/api/tts/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Привет, добро пожаловать на стрим!", voice: voiceId }),
+      });
+
+      if (!res.ok) {
+        neuralPreviewError.textContent = "Preview failed (neural TTS unavailable)";
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.addEventListener("ended", function () {
+        URL.revokeObjectURL(url);
+      });
+      audio.play();
+    } catch {
+      neuralPreviewError.textContent = "Preview failed (neural TTS unavailable)";
+    } finally {
+      neuralInFlight = false;
+      if (!ttsNeuralVoiceEl.disabled) {
+        neuralPreviewBtn.disabled = false;
+      }
+    }
+  });
 
   function renderTemplates() {
     while (templateListEl.firstChild) {
@@ -159,12 +287,21 @@
     });
 
     ttsEnabledEl.checked = !!data.tts_enabled;
+    enableTestMessagesEl.checked = !!data.enable_test_messages;
+
+    ttsEngineEl.value = data.tts_engine || "browser";
+    updateEnginePanel();
+
+    savedTtsNeuralVoice = data.tts_neural_voice || "";
+    ttsFallbackEl.checked = !!data.tts_fallback_to_browser;
 
     savedTtsVoice = data.tts_voice || "";
     populateVoices();
 
     templates = Array.isArray(data.templates) ? data.templates.slice() : [];
     renderTemplates();
+
+    fetchNeuralVoices();
   }
 
   function readForm() {
@@ -175,7 +312,11 @@
     });
 
     out.tts_enabled = ttsEnabledEl.checked;
+    out.tts_engine = ttsEngineEl.value;
     out.tts_voice = ttsVoiceEl.value;
+    out.tts_neural_voice = ttsNeuralVoiceEl.value;
+    out.tts_fallback_to_browser = ttsFallbackEl.checked;
+    out.enable_test_messages = enableTestMessagesEl.checked;
     out.templates = templates.slice();
 
     return out;

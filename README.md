@@ -25,8 +25,12 @@ All connection, parsing, normalization, and serving logic runs in one Python
   - **Composer** — send a message to Twitch *or* TikTok chat, with a remembered
     platform choice, quick-insert **templates** (managed in Settings), and a
     built-in **emoji** picker.
-- **Text-to-speech** — optionally read chat aloud in **Russian**. Latin-script
-  messages are also read with a Russian voice. Voice is configurable in Settings.
+- **Text-to-speech** — optionally read each chat message aloud in **Russian**
+  (the nickname is never read). Latin-script messages are also read with a
+  Russian voice. Two engines: **browser** (offline OS voices) or **neural**
+  (edge-tts online voices, more natural). Auditioned and chosen in Settings.
+- **Test messages** — a config flag and a composer **Test** button let you inject
+  demo chat lines before a real stream is connected. Off by default.
 - **Desktop overlay mode** — an always-on-top, transparent, click-through window
   that floats over your other apps (PySide6/Qt). See *Desktop overlay mode* below.
 
@@ -137,15 +141,22 @@ There are two layers, in order of precedence:
 | `TIKTOK_SESSIONID` | to **send** to TikTok | ⚠️ Your TikTok session cookie — **grants full access to your account**. Local only; never share it. See the warning below. |
 | `TIKTOK_TARGET_IDC` | no | TikTok data-center hint (e.g. `useast1a`). Only needed if sending fails with a region error. |
 | `TTS_ENABLED` | no | `true`/`false`. Read chat aloud (Russian). Default `false`. |
-| `TTS_VOICE` | no | Preferred system voice name for TTS. Blank = first available Russian voice. |
+| `TTS_ENGINE` | no | `browser` (OS voices, offline) or `neural` (edge-tts, online). Default `browser`. |
+| `TTS_VOICE` | no | Preferred **browser** voice name. Blank = first available Russian voice. |
+| `TTS_NEURAL_VOICE` | no | edge-tts voice for the neural engine. Default `ru-RU-SvetlanaNeural`. |
+| `TTS_FALLBACK_TO_BROWSER` | no | `true`/`false`. If neural synthesis fails, speak with a browser voice. Default `false`. |
 | `TEMPLATES` | no | JSON array of quick-reply phrases for the composer. |
+| `ENABLE_TEST_MESSAGES` | no | `true`/`false`. Emit fake demo chat when no stream is connected. Default `false`. |
 | `HOST` | no | Default `0.0.0.0` (`127.0.0.1` in the packaged binary). |
 | `PORT` | no | Default `8000`. |
 | `RING_BUFFER_SIZE` | no | Backfill size for new overlays. Default `50`. |
 
 If neither `TWITCH_CHANNEL` nor `TIKTOK_USERNAME` is set (in either layer) and
-no `settings.json` exists yet, the root URL redirects to `/settings` on
-first launch and a built-in fake publisher runs in the background.
+no `settings.json` exists yet, the root URL redirects to `/settings` on first
+launch. Demo/test messages are **off by default** — set `ENABLE_TEST_MESSAGES`
+(or tick the box in Settings) to have the overlay emit fake chat lines while no
+stream is connected, useful for styling before going live. You can also inject a
+one-off line with the composer's **Test** button (operator view only).
 
 ### ⚠️ Security: sending credentials
 
@@ -163,15 +174,31 @@ sensitive:
 
 ### Text-to-speech setup
 
-TTS uses your operating system's speech voices through the browser. To read
-Russian you need a Russian system voice installed:
+TTS reads the **message text** aloud (never the nickname). Enable **Read chat
+aloud** in Settings, choose an engine, and use the **Preview** button to audition
+voices before picking one. There are two engines:
+
+**Browser** (`TTS_ENGINE=browser`) — uses your operating system's voices through
+the overlay's browser. Offline and instant, but you need a Russian system voice
+installed:
 
 - **macOS**: System Settings → Accessibility → Spoken Content → System Voice →
   Manage Voices → add a Russian voice (e.g. **Milena**).
-- **Windows**: Settings → Time & Language → Speech → add a Russian voice.
+- **Windows**: Settings → Time & Language → Speech → add a Russian voice
+  (e.g. **Microsoft Irina** or **Pavel**).
 
-Then enable **Read chat aloud** in the Settings page and pick the voice. Latin
-text is still spoken with the Russian voice.
+**Neural** (`TTS_ENGINE=neural`) — uses [edge-tts](https://github.com/rany2/edge-tts)
+Microsoft online neural voices. Much more natural, but needs an internet
+connection (~2-3s latency). Good Russian voices: **`ru-RU-SvetlanaNeural`**
+(female) and **`ru-RU-DmitryNeural`** (male). edge-tts is bundled in the released
+binaries; from source run `pip install edge-tts`. Set `TTS_FALLBACK_TO_BROWSER`
+to fall back to a browser voice if neural synthesis fails (e.g. offline).
+
+Latin-script text is still spoken with a Russian voice in both engines.
+
+> **OBS double-audio:** if you keep an operator window open *and* add the overlay
+> as an OBS browser source, both will speak each line. Append `?mute_tts=1` to the
+> OBS source URL so only the operator window speaks.
 
 ### Chat templates
 
@@ -205,6 +232,7 @@ for legibility over arbitrary video.
 | `limit` | integer | `100` | Max rendered rows. |
 | `showsource` | `1` | off | Show the platform icon / avatar. |
 | `fontsize` | integer (px) | `18` | Message font size. |
+| `mute_tts` | `1` | off | Disable all TTS in this window (use on the OBS source to avoid double audio). |
 
 Twitch is accented purple (`#7B68EE`); TikTok blue (`#6495ED`). Twitch supplies
 per-user colors directly; TikTok colors are derived deterministically from the

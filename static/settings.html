@@ -40,6 +40,14 @@
           <p class="hint">Include the <code>@</code>. Leave blank to disable TikTok.</p>
         </div>
 
+        <div class="field">
+          <div class="inline-check">
+            <input type="checkbox" id="enable_test_messages" name="enable_test_messages" />
+            <label for="enable_test_messages">Show demo/test messages when no stream is connected</label>
+          </div>
+          <p class="hint">When on, the overlay shows looping fake Twitch/TikTok messages if no real stream is connected — useful for testing your layout. Turn off for production.</p>
+        </div>
+
         <details class="advanced">
           <summary>Advanced (optional)</summary>
           <div class="field">
@@ -156,13 +164,47 @@
           </div>
 
           <div class="field">
-            <label for="tts_voice">Voice</label>
-            <select id="tts_voice" name="tts_voice"></select>
-            <p class="hint" id="tts-voice-hint">
-              Voices come from your operating system. On macOS enable 'Milena' (Russian) in
-              System Settings → Accessibility → Spoken Content. On Windows install a Russian voice
-              in Settings → Time &amp; Language → Speech.
-            </p>
+            <label for="tts_engine">TTS Engine</label>
+            <select id="tts_engine" name="tts_engine">
+              <option value="browser">Browser (offline, system voices)</option>
+              <option value="neural">Neural (edge-tts, online, higher quality)</option>
+            </select>
+            <p class="hint">Tip: if you run BOTH an operator window and an OBS browser source, add <code>?mute_tts=1</code> to the OBS source URL so chat is only read aloud once.</p>
+          </div>
+
+          <div class="tts-panel" id="tts-browser-panel">
+            <div class="field">
+              <label for="tts_voice">Browser Voice</label>
+              <div class="voice-row">
+                <select id="tts_voice" name="tts_voice"></select>
+                <button type="button" class="btn ghost btn-preview" id="browser-preview-btn">&#9654; Preview</button>
+              </div>
+              <p class="hint" id="tts-voice-hint">
+                Voices come from your operating system. On macOS enable 'Milena' (Russian) in
+                System Settings &#x2192; Accessibility &#x2192; Spoken Content. On Windows install a Russian voice
+                in Settings &#x2192; Time &amp; Language &#x2192; Speech.
+              </p>
+            </div>
+          </div>
+
+          <div class="tts-panel hidden" id="tts-neural-panel">
+            <div class="field">
+              <label for="tts_neural_voice">Neural Voice</label>
+              <div class="voice-row">
+                <select id="tts_neural_voice" name="tts_neural_voice"></select>
+                <button type="button" class="btn ghost btn-preview" id="neural-preview-btn">&#9654; Preview</button>
+                <button type="button" class="btn ghost btn-refresh" id="neural-refresh-btn">&#8635; Refresh</button>
+              </div>
+              <p class="hint" id="neural-voice-hint"></p>
+              <p class="preview-error" id="neural-preview-error"></p>
+            </div>
+            <div class="field">
+              <div class="inline-check">
+                <input type="checkbox" id="tts_fallback_to_browser" name="tts_fallback_to_browser" />
+                <label for="tts_fallback_to_browser">Fall back to browser voice if neural fails</label>
+              </div>
+              <p class="hint">If a neural request errors or times out, read the message with a browser voice instead of skipping it.</p>
+            </div>
           </div>
         </details>
 
