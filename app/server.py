@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,7 +22,16 @@ from .supervisor import supervise
 
 log = logging.getLogger("server")
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+def _static_dir() -> Path:
+    # In a PyInstaller frozen build, bundled data lives under sys._MEIPASS.
+    bundled = getattr(sys, "_MEIPASS", None)
+    if bundled:
+        return Path(bundled) / "static"
+    return Path(__file__).resolve().parent.parent / "static"
+
+
+STATIC_DIR = _static_dir()
 
 
 async def _fake_publisher(bus: EventBus) -> None:

@@ -1,0 +1,139 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to attach artifacts to (leave empty for dry-run, no release)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macos-arm64
+            artifact_name: live-chat-agg-macos-arm64.zip
+            python_version: '3.12'
+          - os: windows-latest
+            label: windows-x64
+            artifact_name: live-chat-agg-windows-x64.zip
+            python_version: '3.12'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/Library/Caches/pip
+            ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-dev.txt', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Smoke-test app import (catch packaging-relevant import errors)
+        run: |
+          python -c "from app.launcher import main; from app.server import create_app; from app.config import Settings; print('import OK')"
+
+      - name: Build (PyInstaller)
+        run: pyinstaller live_chat_agg.spec --noconfirm --clean
+
+      - name: List build output
+        shell: bash
+        run: ls -la dist
+
+      - name: Package (macOS — zip the .app bundle)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -ry "${{ matrix.artifact_name }}" "live-chat-agg.app"
+          ls -la
+
+      - name: Package (Windows — zip the .exe)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd dist
+          Compress-Archive -Path "live-chat-agg.exe" -DestinationPath "${{ matrix.artifact_name }}" -Force
+          Get-ChildItem
+
+      - name: Smoke-test binary boots and serves overlay (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ./dist/live-chat-agg.app/Contents/MacOS/live-chat-agg &
+          PID=$!
+          sleep 8
+          curl -fsS http://127.0.0.1:8000/ | head -c 200
+          echo
+          curl -fsS http://127.0.0.1:8000/static/overlay.css | head -c 200
+          echo
+          kill $PID || true
+          wait $PID 2>/dev/null || true
+
+      - name: Smoke-test binary boots and serves overlay (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "dist\live-chat-agg.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 10
+          try {
+            $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/"
+            if ($r.StatusCode -ne 200) { throw "unexpected status $($r.StatusCode)" }
+            Write-Host "smoke OK"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded files
+        run: find artifacts -type f | sort
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false

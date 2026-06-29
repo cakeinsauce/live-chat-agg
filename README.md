@@ -8,6 +8,38 @@ default).
 All connection, parsing, normalization, and serving logic runs in one Python
 `asyncio` process. The only non-Python artifact is a thin static HTML/JS overlay.
 
+## Quick install (no Python required)
+
+Pre-built binaries are published with each release. **No Python install needed.**
+
+1. Go to the **[Releases](../../releases/latest)** page and download:
+   - **macOS** (Apple Silicon): `live-chat-agg-macos-arm64.zip`
+   - **Windows** (x64): `live-chat-agg-windows-x64.zip`
+2. Unzip it anywhere convenient (Desktop, `~/Applications`, etc.).
+3. **Launch:**
+   - **macOS**: double-click `live-chat-agg.app`. The first time you run it,
+     macOS will block it because the app isn't notarized. Fix it once:
+     **right-click the app → Open → Open** in the dialog. After that,
+     normal double-click works.
+   - **Windows**: double-click `live-chat-agg.exe`. Windows SmartScreen will
+     warn that the publisher is unverified. Click **More info → Run anyway**.
+4. On first launch the app creates a `.env` file next to the binary and opens
+   your browser to <http://localhost:8000>. You'll see a built-in demo stream.
+5. **Configure your channels:** open the freshly-created `.env` in a text
+   editor, fill in `TWITCH_CHANNEL` and/or `TIKTOK_USERNAME`, save, and
+   relaunch the app.
+6. **Add it to OBS:** Sources → `+` → Browser →
+   URL: `http://localhost:8000/?bg=transparent&showsource=1`. Width 600, height
+   800 is a good start. The background is transparent so it overlays cleanly
+   on your stream.
+
+A log file `live-chat-agg.log` is created next to the binary for
+troubleshooting (it'll show why TikTok said "not live, retrying" etc.).
+
+> If the binary can't write next to itself (e.g. you dragged it to
+> `/Applications`), the `.env` and log are placed in `~/.live-chat-agg/`
+> instead.
+
 ## How it works
 
 ```
@@ -35,12 +67,13 @@ retry on that one task. It never affects Twitch or the web server.
 "Streamer not live" is the *normal* state most of the time — the app logs
 `not live, retrying` and backs off rather than crashing or spamming errors.
 
-## Requirements
+## Build from source
 
-- Python 3.11+ (developed/tested on 3.14)
-- A Twitch channel name and/or a TikTok `@handle`
+Use this path if you want to hack on the code, run on Linux, or build your own
+Mac/Windows binary.
 
-## Setup
+**Requirements:** Python 3.11+ (developed/tested on 3.14) and a Twitch channel
+name and/or a TikTok `@handle`.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
@@ -106,11 +139,37 @@ app/
   bus.py               EventBus: broadcast + ring buffer
   supervisor.py        run-forever-with-backoff wrapper
   server.py            FastAPI: /ws, static mount, lifespan, connector wiring
-  main.py              entrypoint
+  main.py              dev entrypoint (uvicorn from cwd .env)
+  launcher.py          packaged-binary entrypoint (.env-next-to-binary + auto-browser)
   connectors/
     base.py            Connector ABC
     twitch.py          anonymous IRC-over-WS reader + IRCv3 tag parser
     tiktok.py          TikTokLive wrapper with offline/reconnect handling
 static/
   index.html / overlay.js / overlay.css   the OBS-friendly overlay
+run_packaged.py        PyInstaller entry script (imports app.launcher.main)
+live_chat_agg.spec     PyInstaller spec: onedir+.app on macOS, onefile .exe elsewhere
+.github/workflows/release.yml   matrix build (mac+win), auto-publish on tag push
+```
+
+## Releasing binaries
+
+GitHub Actions builds Mac `.app` and Windows `.exe` artifacts and attaches them
+to a Release whenever you push a tag matching `v*`:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+You can also trigger a dry-run build (no Release published) via the
+**Actions → release → Run workflow** button on GitHub.
+
+To build locally:
+
+```bash
+pip install -r requirements-dev.txt
+pyinstaller live_chat_agg.spec --noconfirm --clean
+# macOS  → dist/live-chat-agg.app
+# Windows / Linux → dist/live-chat-agg.exe (or live-chat-agg)
 ```
