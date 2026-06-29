@@ -10,6 +10,13 @@
     document.documentElement.style.setProperty("--fontsize", parseInt(fontSize, 10) + "px");
   }
 
+  // Hide the settings button when this looks like an OBS browser source
+  // (?bg=transparent&showsource=1) or chrome=0 is explicitly set.
+  const obsLike = params.get("bg") === "transparent" && showSource;
+  const chromeHidden = params.get("chrome") === "0" || obsLike;
+  const chrome = document.getElementById("chrome");
+  if (chrome && chromeHidden) chrome.hidden = true;
+
   const chat = document.getElementById("chat");
 
   function escapeHtml(s) {

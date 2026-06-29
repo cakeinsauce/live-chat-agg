@@ -25,6 +25,7 @@ import uvicorn
 
 from .config import Settings
 from .server import create_app
+from .settings_store import apply_runtime_settings, load_runtime_settings
 
 log = logging.getLogger("launcher")
 
@@ -131,6 +132,10 @@ def main() -> None:
     log.info("log file: %s", log_file)
 
     settings = Settings(_env_file=str(env_path))
+    runtime_overrides = load_runtime_settings(config_dir)
+    if runtime_overrides:
+        settings = apply_runtime_settings(settings, runtime_overrides)
+        log.info("applied runtime overrides from %s", config_dir / "settings.json")
 
     host = settings.HOST
     port = settings.PORT
@@ -145,7 +150,7 @@ def main() -> None:
 
     log.info("starting live-chat-agg on %s (close this window to stop)", url)
 
-    app = create_app(settings)
+    app = create_app(settings, config_dir=config_dir)
     try:
         uvicorn.run(app, host=host, port=port, log_level="info")
     except KeyboardInterrupt:

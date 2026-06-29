@@ -23,22 +23,27 @@ Pre-built binaries are published with each release. **No Python install needed.*
      normal double-click works.
    - **Windows**: double-click `live-chat-agg.exe`. Windows SmartScreen will
      warn that the publisher is unverified. Click **More info → Run anyway**.
-4. On first launch the app creates a `.env` file next to the binary and opens
-   your browser to <http://localhost:8000>. You'll see a built-in demo stream.
-5. **Configure your channels:** open the freshly-created `.env` in a text
-   editor, fill in `TWITCH_CHANNEL` and/or `TIKTOK_USERNAME`, save, and
-   relaunch the app.
-6. **Add it to OBS:** Sources → `+` → Browser →
+4. On first launch the app opens your browser to a **Settings** page.
+5. **Configure your channels in the form:**
+   - **Twitch channel** — the bit after `twitch.tv/` (no `#`)
+   - **TikTok handle** — include the `@`
+   - **Advanced → EulerStream API key** — optional, for higher TikTok rate limits
+   - Click **Save & connect**. The app reconnects to the new channels
+     instantly — no restart needed.
+6. Click **Open overlay** (or the gear icon top-right) to see the merged feed.
+7. **Add it to OBS:** Sources → `+` → Browser →
    URL: `http://localhost:8000/?bg=transparent&showsource=1`. Width 600, height
    800 is a good start. The background is transparent so it overlays cleanly
-   on your stream.
+   on your stream. Use the **Copy OBS URL** button on the settings page if you
+   change ports.
 
-A log file `live-chat-agg.log` is created next to the binary for
-troubleshooting (it'll show why TikTok said "not live, retrying" etc.).
+Your settings are persisted to `settings.json` next to the binary, so they
+stick across launches. A log file `live-chat-agg.log` is also created next to
+the binary (it'll show why TikTok said "not live, retrying" etc.).
 
 > If the binary can't write next to itself (e.g. you dragged it to
-> `/Applications`), the `.env` and log are placed in `~/.live-chat-agg/`
-> instead.
+> `/Applications`), `settings.json` and the log are placed in
+> `~/.live-chat-agg/` instead.
 
 ## How it works
 
@@ -84,20 +89,29 @@ python -m app.main
 
 Open <http://localhost:8000> to see the overlay.
 
-## Configuration (`.env`)
+## Configuration
+
+There are two layers, in order of precedence:
+
+1. **In-app settings** (`settings.json`, edited via the **Settings** page at
+   <http://localhost:8000/settings>) — for streamer-facing config that needs to
+   change between sessions. Persists `twitch_channel`, `tiktok_username`,
+   `sign_api_key`. Changes apply live without restarting the process.
+2. **`.env`** — for power-user / dev defaults. Everything below is supported.
 
 | Var | Required | Notes |
 |---|---|---|
-| `TWITCH_CHANNEL` | for Twitch | Channel login name, no `#`. |
+| `TWITCH_CHANNEL` | for Twitch | Channel login name, no `#`. Overridable via `/settings`. |
 | `TWITCH_OAUTH_TOKEN` | no | Reading works anonymously without it. |
-| `TIKTOK_USERNAME` | for TikTok | The `@handle` to follow when live. |
-| `SIGN_API_KEY` | no | EulerStream API key for TikTokLive signing — see below. |
-| `HOST` | no | Default `0.0.0.0`. |
+| `TIKTOK_USERNAME` | for TikTok | The `@handle` to follow when live. Overridable via `/settings`. |
+| `SIGN_API_KEY` | no | EulerStream key for TikTokLive signing — see below. Overridable via `/settings`. |
+| `HOST` | no | Default `0.0.0.0` (`127.0.0.1` in the packaged binary). |
 | `PORT` | no | Default `8000`. |
 | `RING_BUFFER_SIZE` | no | Backfill size for new overlays. Default `50`. |
 
-If neither `TWITCH_CHANNEL` nor `TIKTOK_USERNAME` is set, a built-in fake
-publisher streams demo messages every 2s so you can verify the overlay works.
+If neither `TWITCH_CHANNEL` nor `TIKTOK_USERNAME` is set (in either layer) and
+no `settings.json` exists yet, the root URL redirects to `/settings` on
+first launch and a built-in fake publisher runs in the background.
 
 ### `SIGN_API_KEY` (optional)
 
@@ -138,7 +152,8 @@ app/
   models.py            ChatMessage contract + deterministic color helper
   bus.py               EventBus: broadcast + ring buffer
   supervisor.py        run-forever-with-backoff wrapper
-  server.py            FastAPI: /ws, static mount, lifespan, connector wiring
+  settings_store.py    settings.json atomic read/write + live-reload layering
+  server.py            FastAPI: /ws, /settings, /api/settings, /api/reconnect
   main.py              dev entrypoint (uvicorn from cwd .env)
   launcher.py          packaged-binary entrypoint (.env-next-to-binary + auto-browser)
   connectors/
@@ -147,6 +162,7 @@ app/
     tiktok.py          TikTokLive wrapper with offline/reconnect handling
 static/
   index.html / overlay.js / overlay.css   the OBS-friendly overlay
+  settings.html / settings.css / settings.js   the in-app config form
 run_packaged.py        PyInstaller entry script (imports app.launcher.main)
 live_chat_agg.spec     PyInstaller spec: onedir+.app on macOS, onefile .exe elsewhere
 .github/workflows/release.yml   matrix build (mac+win), auto-publish on tag push
@@ -158,8 +174,8 @@ GitHub Actions builds Mac `.app` and Windows `.exe` artifacts and attaches them
 to a Release whenever you push a tag matching `v*`:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 You can also trigger a dry-run build (no Release published) via the

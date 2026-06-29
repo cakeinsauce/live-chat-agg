@@ -124,3 +124,62 @@ body.bg-light .msg {
 .text {
   flex: 1 1 auto;
 }
+
+.chrome {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.chrome[hidden] {
+  display: none;
+}
+
+.chrome-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(24, 24, 27, 0.85);
+  color: #efeff1;
+  text-decoration: none;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.05s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.chrome-btn:hover {
+  background: rgba(145, 70, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.chrome-btn:active {
+  transform: translateY(1px);
+}
+
+.chrome-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+body.bg-light .chrome-btn {
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+body.bg-light .chrome-btn:hover {
+  background: rgba(145, 70, 255, 0.85);
+  color: white;
+}

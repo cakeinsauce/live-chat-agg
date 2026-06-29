@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Chat Aggregator — Settings</title>
+    <link rel="stylesheet" href="/static/settings.css" />
+  </head>
+  <body>
+    <main class="card">
+      <header class="card-header">
+        <h1>Live Chat Aggregator</h1>
+        <p class="subtitle">Configure your channels. Changes apply instantly — no restart.</p>
+      </header>
+
+      <form id="settings-form" autocomplete="off">
+        <div class="field">
+          <label for="twitch_channel">Twitch channel</label>
+          <input
+            id="twitch_channel"
+            name="twitch_channel"
+            type="text"
+            placeholder="your_channel_name"
+            spellcheck="false"
+            autocapitalize="off"
+          />
+          <p class="hint">The part after <code>twitch.tv/</code>. Leave blank to disable Twitch.</p>
+        </div>
+
+        <div class="field">
+          <label for="tiktok_username">TikTok handle</label>
+          <input
+            id="tiktok_username"
+            name="tiktok_username"
+            type="text"
+            placeholder="@yourtiktok"
+            spellcheck="false"
+            autocapitalize="off"
+          />
+          <p class="hint">Include the <code>@</code>. Leave blank to disable TikTok.</p>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced (optional)</summary>
+          <div class="field">
+            <label for="sign_api_key">EulerStream API key</label>
+            <input
+              id="sign_api_key"
+              name="sign_api_key"
+              type="text"
+              placeholder="leave blank for free tier"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">
+              Lifts TikTok rate limits for very active streams. Most streamers don't need this. Get a
+              key at <a href="https://www.eulerstream.com/" target="_blank" rel="noreferrer">eulerstream.com</a>.
+            </p>
+          </div>
+        </details>
+
+        <div class="actions">
+          <button type="submit" class="btn primary" id="save-btn">Save &amp; connect</button>
+          <button type="button" class="btn secondary" id="reconnect-btn">Reconnect</button>
+        </div>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </form>
+
+      <footer class="card-footer">
+        <a class="btn ghost" href="/?overlay=1">Open overlay</a>
+        <button type="button" class="btn ghost" id="copy-obs-btn">Copy OBS URL</button>
+      </footer>
+
+      <p class="tip">
+        <strong>OBS browser source:</strong>
+        <code id="obs-url">http://localhost:8000/?bg=transparent&amp;showsource=1</code>
+        — width <strong>600</strong>, height <strong>800</strong>.
+      </p>
+    </main>
+
+    <script src="/static/settings.js"></script>
+  </body>
+</html>
