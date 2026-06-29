@@ -5,3 +5,5 @@ TikTokLive
 pydantic
 pydantic-settings
 python-dotenv
+httpx
+PySide6

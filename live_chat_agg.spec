@@ -7,7 +7,18 @@ IS_DARWIN = sys.platform == "darwin"
 
 datas = [("static", "static")]
 binaries = []
-hiddenimports = ["app", "app.config", "app.server", "app.launcher"]
+hiddenimports = [
+    "app",
+    "app.config",
+    "app.server",
+    "app.launcher",
+    "app.desktop",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtWebEngineCore",
+    "PySide6.QtWebEngineWidgets",
+]
 
 _COLLECT_ALL_PKGS = [
     "TikTokLive",
@@ -26,6 +37,7 @@ _COLLECT_ALL_PKGS = [
     "wsproto",
     "anyio",
     "click",
+    "PySide6",
 ]
 
 for pkg in _COLLECT_ALL_PKGS:
@@ -96,8 +108,8 @@ if IS_DARWIN:
         info_plist={
             "CFBundleName": "Live Chat Aggregator",
             "CFBundleDisplayName": "Live Chat Aggregator",
-            "CFBundleShortVersionString": "0.1.0",
-            "CFBundleVersion": "0.1.0",
+            "CFBundleShortVersionString": "3.0.0",
+            "CFBundleVersion": "3.0.0",
             "NSHighResolutionCapable": True,
             "LSBackgroundOnly": False,
         },

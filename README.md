@@ -8,6 +8,31 @@ default).
 All connection, parsing, normalization, and serving logic runs in one Python
 `asyncio` process. The only non-Python artifact is a thin static HTML/JS overlay.
 
+## Features
+
+- **Unified chat** — Twitch and TikTok messages in one feed. Twitch nicks are
+  accented purple (`#7B68EE`), TikTok nicks blue (`#6495ED`), on a dark
+  semi-transparent card; message text is white.
+- **Live stats header** — a two-column counter strip: **TikTok** (viewers,
+  gifts, subscriptions this stream, likes) and **Twitch** (viewers,
+  subscriptions this stream).
+- **Gifts panel** — TikTok gifts with name, image, and giver; identical gifts
+  from the same user **stack** (`×N`).
+- **Subscriptions inline** — subs appear in the chat flow, de-emphasized.
+- **Operator controls** (visible only outside OBS source mode):
+  - **Block** a message author with one click.
+  - **Show on stream** — pin any message so all overlays (and OBS) display it.
+  - **Composer** — send a message to Twitch *or* TikTok chat, with a remembered
+    platform choice, quick-insert **templates** (managed in Settings), and a
+    built-in **emoji** picker.
+- **Text-to-speech** — optionally read chat aloud in **Russian**. Latin-script
+  messages are also read with a Russian voice. Voice is configurable in Settings.
+- **Desktop overlay mode** — an always-on-top, transparent, click-through window
+  that floats over your other apps (PySide6/Qt). See *Desktop overlay mode* below.
+
+> Sending messages and Twitch viewer/sub counts require extra credentials. See
+> *Configuration* and the security warnings there before enabling them.
+
 ## Quick install (no Python required)
 
 Pre-built binaries are published with each release. **No Python install needed.**
@@ -95,16 +120,25 @@ There are two layers, in order of precedence:
 
 1. **In-app settings** (`settings.json`, edited via the **Settings** page at
    <http://localhost:8000/settings>) — for streamer-facing config that needs to
-   change between sessions. Persists `twitch_channel`, `tiktok_username`,
-   `sign_api_key`. Changes apply live without restarting the process.
+   change between sessions. Persists all the runtime keys below (channels,
+   credentials, TTS, templates). Changes apply live without restarting the
+   process.
 2. **`.env`** — for power-user / dev defaults. Everything below is supported.
 
 | Var | Required | Notes |
 |---|---|---|
 | `TWITCH_CHANNEL` | for Twitch | Channel login name, no `#`. Overridable via `/settings`. |
-| `TWITCH_OAUTH_TOKEN` | no | Reading works anonymously without it. |
+| `TWITCH_OAUTH_TOKEN` | to **send** to Twitch | OAuth token with the `chat:edit` scope. Reading works anonymously without it. |
+| `TWITCH_BOT_USERNAME` | to **send** to Twitch | Login name the OAuth token belongs to. Both this and the token are required to send. |
+| `TWITCH_CLIENT_ID` | for Twitch counts | Twitch app Client ID, for live viewer/sub counts via the Helix API. |
+| `TWITCH_CLIENT_SECRET` | for Twitch counts | Paired with the Client ID. Stored locally only. |
 | `TIKTOK_USERNAME` | for TikTok | The `@handle` to follow when live. Overridable via `/settings`. |
 | `SIGN_API_KEY` | no | EulerStream key for TikTokLive signing — see below. Overridable via `/settings`. |
+| `TIKTOK_SESSIONID` | to **send** to TikTok | ⚠️ Your TikTok session cookie — **grants full access to your account**. Local only; never share it. See the warning below. |
+| `TIKTOK_TARGET_IDC` | no | TikTok data-center hint (e.g. `useast1a`). Only needed if sending fails with a region error. |
+| `TTS_ENABLED` | no | `true`/`false`. Read chat aloud (Russian). Default `false`. |
+| `TTS_VOICE` | no | Preferred system voice name for TTS. Blank = first available Russian voice. |
+| `TEMPLATES` | no | JSON array of quick-reply phrases for the composer. |
 | `HOST` | no | Default `0.0.0.0` (`127.0.0.1` in the packaged binary). |
 | `PORT` | no | Default `8000`. |
 | `RING_BUFFER_SIZE` | no | Backfill size for new overlays. Default `50`. |
@@ -112,6 +146,38 @@ There are two layers, in order of precedence:
 If neither `TWITCH_CHANNEL` nor `TIKTOK_USERNAME` is set (in either layer) and
 no `settings.json` exists yet, the root URL redirects to `/settings` on
 first launch and a built-in fake publisher runs in the background.
+
+### ⚠️ Security: sending credentials
+
+Reading chat needs **no** credentials. Sending and counts do, and they are
+sensitive:
+
+- **TikTok `TIKTOK_SESSIONID`** is your logged-in session cookie. Anyone who has
+  it can act as **your full TikTok account**. It is stored only in the local
+  `settings.json`/`.env` on your machine and is never transmitted anywhere except
+  to TikTok itself when sending. Do not commit it, screen-share it, or paste it
+  anywhere public. Leave it blank unless you actually want to send to TikTok chat.
+- **Twitch `TWITCH_OAUTH_TOKEN`** must have the `chat:edit` scope and belongs to
+  the account named in `TWITCH_BOT_USERNAME`. Treat it like a password. Reading
+  never needs it.
+
+### Text-to-speech setup
+
+TTS uses your operating system's speech voices through the browser. To read
+Russian you need a Russian system voice installed:
+
+- **macOS**: System Settings → Accessibility → Spoken Content → System Voice →
+  Manage Voices → add a Russian voice (e.g. **Milena**).
+- **Windows**: Settings → Time & Language → Speech → add a Russian voice.
+
+Then enable **Read chat aloud** in the Settings page and pick the voice. Latin
+text is still spoken with the Russian voice.
+
+### Chat templates
+
+Saved quick-reply phrases for the composer. Add/remove them on the Settings page
+(or via the `TEMPLATES` JSON array). They appear in the composer's templates
+popup for one-click insertion when sending.
 
 ### `SIGN_API_KEY` (optional)
 
@@ -140,28 +206,60 @@ for legibility over arbitrary video.
 | `showsource` | `1` | off | Show the platform icon / avatar. |
 | `fontsize` | integer (px) | `18` | Message font size. |
 
-Twitch is accented purple (`#9146FF`); TikTok teal (`#25F4EE`). Twitch supplies
+Twitch is accented purple (`#7B68EE`); TikTok blue (`#6495ED`). Twitch supplies
 per-user colors directly; TikTok colors are derived deterministically from the
 user id (hash → HSL) so each user keeps a consistent color.
+
+The operator composer, per-message **Block** / **Show on stream** buttons, the
+stats header, and the gifts panel are part of the normal overlay. The
+moderation controls and composer are **hidden in OBS source mode**
+(`?bg=transparent&showsource=1`) so they never appear on stream.
+
+## Desktop overlay mode
+
+In addition to the browser/OBS overlay, the app can open an **always-on-top,
+transparent, click-through** window that floats over your other applications —
+handy for monitoring chat while you do something else on the same screen.
+
+Enable it with either a CLI flag or an environment variable:
+
+```bash
+# from source
+python -m app.launcher --desktop
+# or
+LCA_DESKTOP=1 python -m app.launcher
+```
+
+The packaged binaries also accept the `--desktop` flag / `LCA_DESKTOP=1`.
+
+Desktop mode uses [PySide6](https://pypi.org/project/PySide6/) (Qt WebEngine). It
+is bundled into the released binaries. If you run from source and PySide6 isn't
+installed, the app logs a warning and falls back to the normal browser flow —
+install it with `pip install PySide6`. The window is click-through, so it won't
+intercept your mouse; close it (or Ctrl-C the console) to stop.
 
 ## Project layout
 
 ```
 app/
   config.py            pydantic-settings config from .env
-  models.py            ChatMessage contract + deterministic color helper
-  bus.py               EventBus: broadcast + ring buffer
+  models.py            wire frames (chat/sub/gift/stats) + deterministic color helper
+  bus.py               EventBus: broadcast + ring buffer + blocklist
+  stats.py             StatsState: debounced live counters (viewers/gifts/subs/likes)
   supervisor.py        run-forever-with-backoff wrapper
   settings_store.py    settings.json atomic read/write + live-reload layering
-  server.py            FastAPI: /ws, /settings, /api/settings, /api/reconnect
+  server.py            FastAPI: /ws, /settings, /api/{settings,reconnect,send,block,pin}
   main.py              dev entrypoint (uvicorn from cwd .env)
-  launcher.py          packaged-binary entrypoint (.env-next-to-binary + auto-browser)
+  launcher.py          packaged-binary entrypoint (+ --desktop overlay mode)
+  desktop.py           PySide6 always-on-top transparent click-through window
   connectors/
-    base.py            Connector ABC
-    twitch.py          anonymous IRC-over-WS reader + IRCv3 tag parser
-    tiktok.py          TikTokLive wrapper with offline/reconnect handling
+    base.py            Connector ABC (read + optional send)
+    twitch.py          anonymous IRC-over-WS reader + IRCv3 parser + subs + send
+    twitch_helix.py    Helix poller for live viewer counts
+    tiktok.py          TikTokLive wrapper: chat/gifts/likes/follows/subs + send
 static/
-  index.html / overlay.js / overlay.css   the OBS-friendly overlay
+  index.html / overlay.js / overlay.css   the OBS-friendly overlay + composer
+  tts.js                                   Russian text-to-speech helper
   settings.html / settings.css / settings.js   the in-app config form
 run_packaged.py        PyInstaller entry script (imports app.launcher.main)
 live_chat_agg.spec     PyInstaller spec: onedir+.app on macOS, onefile .exe elsewhere
@@ -174,8 +272,8 @@ GitHub Actions builds Mac `.app` and Windows `.exe` artifacts and attaches them
 to a Release whenever you push a tag matching `v*`:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v3.0.0
+git push origin v3.0.0
 ```
 
 You can also trigger a dry-run build (no Release published) via the

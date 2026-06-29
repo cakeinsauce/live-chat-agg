@@ -59,6 +59,130 @@
           </div>
         </details>
 
+        <details class="advanced">
+          <summary>Sending &amp; moderation credentials</summary>
+
+          <div class="field">
+            <label for="twitch_oauth_token">Twitch OAuth token</label>
+            <input
+              id="twitch_oauth_token"
+              name="twitch_oauth_token"
+              type="password"
+              placeholder="oauth:xxxxx"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">
+              Required to SEND messages to Twitch chat. Needs <code>chat:edit</code> scope.
+              Get one at <a href="https://twitchtokengenerator.com/" target="_blank" rel="noreferrer">twitchtokengenerator.com</a>.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="twitch_bot_username">Twitch bot username</label>
+            <input
+              id="twitch_bot_username"
+              name="twitch_bot_username"
+              type="text"
+              placeholder="your_bot_account"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">The account name the OAuth token belongs to. Both this and the token are required to send.</p>
+          </div>
+
+          <div class="field">
+            <label for="twitch_client_id">Twitch app Client ID</label>
+            <input
+              id="twitch_client_id"
+              name="twitch_client_id"
+              type="password"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">
+              For live viewer/sub counts via Twitch API. Create an app at
+              <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noreferrer">dev.twitch.tv/console/apps</a>.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="twitch_client_secret">Twitch app Client Secret</label>
+            <input
+              id="twitch_client_secret"
+              name="twitch_client_secret"
+              type="password"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">Paired with Client ID for viewer counts. Stored locally only.</p>
+          </div>
+
+          <div class="field">
+            <label for="tiktok_sessionid">TikTok session ID</label>
+            <input
+              id="tiktok_sessionid"
+              name="tiktok_sessionid"
+              type="password"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint warn">
+              ⚠ Grants FULL access to your TikTok account. Required only to SEND messages to TikTok
+              chat. Stored locally on this machine only — never share it.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="tiktok_target_idc">TikTok data center (optional)</label>
+            <input
+              id="tiktok_target_idc"
+              name="tiktok_target_idc"
+              type="text"
+              placeholder="useast1a"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">Advanced. Leave blank unless sending fails with a region error.</p>
+          </div>
+        </details>
+
+        <details class="advanced">
+          <summary>Text-to-speech</summary>
+
+          <div class="field checkbox">
+            <input type="checkbox" id="tts_enabled" name="tts_enabled" />
+            <label for="tts_enabled">Read chat messages aloud (Russian TTS)</label>
+          </div>
+
+          <div class="field">
+            <label for="tts_voice">Voice</label>
+            <select id="tts_voice" name="tts_voice"></select>
+            <p class="hint" id="tts-voice-hint">
+              Voices come from your operating system. On macOS enable 'Milena' (Russian) in
+              System Settings → Accessibility → Spoken Content. On Windows install a Russian voice
+              in Settings → Time &amp; Language → Speech.
+            </p>
+          </div>
+        </details>
+
+        <details class="advanced">
+          <summary>Chat templates</summary>
+
+          <ul class="template-list" id="template-list"></ul>
+
+          <div class="template-add">
+            <input
+              type="text"
+              id="template-input"
+              placeholder="New phrase…"
+              spellcheck="false"
+            />
+            <button type="button" class="btn secondary" id="template-add-btn">Add</button>
+          </div>
+          <p class="hint">Saved phrases you can quickly insert when sending a message from the overlay.</p>
+        </details>
+
         <div class="actions">
           <button type="submit" class="btn primary" id="save-btn">Save &amp; connect</button>
           <button type="button" class="btn secondary" id="reconnect-btn">Reconnect</button>

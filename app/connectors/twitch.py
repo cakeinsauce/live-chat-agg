@@ -10,12 +10,14 @@ from typing import Optional
 
 import websockets
 
-from ..models import ChatMessage
+from ..models import ChatMessage, SubEvent
 from .base import Connector
 
 log = logging.getLogger("twitch")
 
 IRC_WS_URL = "wss://irc-ws.chat.twitch.tv:443"
+
+_SUB_MSG_IDS = frozenset({"sub", "resub", "subgift", "anonsubgift", "submysterygift"})
 
 _TAG_ESCAPES = {"s": " ", ":": ";", "r": "\r", "n": "\n", "\\": "\\"}
 
@@ -102,6 +104,46 @@ def irc_to_chat_message(msg: IrcMessage) -> Optional[ChatMessage]:
     )
 
 
+def irc_to_sub_event(msg: IrcMessage) -> Optional[SubEvent]:
+    if msg.command != "USERNOTICE":
+        return None
+    tags = msg.tags
+    if tags.get("msg-id") not in _SUB_MSG_IDS:
+        return None
+
+    username = (
+        tags.get("msg-param-gifter-name")
+        or tags.get("display-name")
+        or tags.get("login")
+        or "unknown"
+    )
+    user_id = tags.get("user-id") or username
+    months = _int_tag(tags.get("msg-param-cumulative-months")) or _int_tag(
+        tags.get("msg-param-gift-months")
+    )
+    text = tags.get("system-msg") or (msg.trailing or "")
+
+    return SubEvent(
+        platform="twitch",
+        user_id=user_id,
+        username=username,
+        text=text,
+        months=months,
+        color=tags.get("color") or None,
+        timestamp=time.time(),
+        raw={"tags": tags},
+    )
+
+
+def _int_tag(value: Optional[str]) -> int:
+    if not value:
+        return 0
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
 def _nick_from_prefix(prefix: Optional[str]) -> Optional[str]:
     if not prefix:
         return None
@@ -109,28 +151,59 @@ def _nick_from_prefix(prefix: Optional[str]) -> Optional[str]:
 
 
 class TwitchConnector(Connector):
+    def __init__(self, bus, config, stats=None) -> None:
+        super().__init__(bus, config, stats=stats)
+        self._ws = None
+        self._channel = ""
+
     async def run(self) -> None:
         channel = self.config.TWITCH_CHANNEL.lstrip("#").lower()
         if not channel:
             raise RuntimeError("TWITCH_CHANNEL is not set")
+        self._channel = channel
 
         async with websockets.connect(IRC_WS_URL) as ws:
-            await self._handshake(ws, channel)
-            log.info("connected to #%s", channel)
-            async for raw in ws:
-                line = raw.decode() if isinstance(raw, bytes) else raw
-                for single in line.split("\r\n"):
-                    if single:
-                        await self._handle_line(ws, single)
+            self._ws = ws
+            try:
+                await self._handshake(ws, channel)
+                log.info("connected to #%s", channel)
+                async for raw in ws:
+                    line = raw.decode() if isinstance(raw, bytes) else raw
+                    for single in line.split("\r\n"):
+                        if single:
+                            await self._handle_line(ws, single)
+            finally:
+                self._ws = None
 
         raise ConnectionError("twitch irc socket closed")
 
+    async def send(self, text: str) -> None:
+        """Send a PRIVMSG as the configured bot account.
+
+        Requires an OAuth token with the ``chat:edit`` scope plus a bot username;
+        the anonymous justinfan login used for read-only mode cannot send.
+        """
+        ws = self._ws
+        if ws is None:
+            raise RuntimeError("twitch is not connected")
+        if not self._send_credentials()[0]:
+            raise RuntimeError("twitch sending requires TWITCH_OAUTH_TOKEN and TWITCH_BOT_USERNAME")
+        safe = text.replace("\r", " ").replace("\n", " ")
+        await ws.send(f"PRIVMSG #{self._channel} :{safe}")
+
+    def _send_credentials(self) -> tuple[Optional[str], Optional[str]]:
+        token = getattr(self.config, "TWITCH_OAUTH_TOKEN", None)
+        bot = getattr(self.config, "TWITCH_BOT_USERNAME", None)
+        if token and bot:
+            return token, bot
+        return None, None
+
     async def _handshake(self, ws, channel: str) -> None:
-        token = self.config.TWITCH_OAUTH_TOKEN
-        if token:
+        token, bot = self._send_credentials()
+        if token and bot:
             bare = token[6:] if token.startswith("oauth:") else token
             await ws.send(f"PASS oauth:{bare}")
-            nick = "tmi"
+            nick = bot.lower()
         else:
             nick = f"justinfan{random.randint(10000, 99999)}"
         await ws.send(f"NICK {nick}")
@@ -142,6 +215,13 @@ class TwitchConnector(Connector):
             await ws.send("PONG :tmi.twitch.tv")
             return
         parsed = parse_irc_message(line)
+        if parsed.command == "USERNOTICE":
+            sub = irc_to_sub_event(parsed)
+            if sub is not None:
+                if self.stats is not None:
+                    self.stats.add_twitch_subs(1)
+                await self.bus.publish(sub)
+            return
         chat = irc_to_chat_message(parsed)
         if chat is not None:
             await self.bus.publish(chat)

@@ -6,7 +6,28 @@
   const copyObsBtn = document.getElementById("copy-obs-btn");
   const obsUrlEl = document.getElementById("obs-url");
 
-  const fields = ["twitch_channel", "tiktok_username", "sign_api_key"];
+  const fields = [
+    "twitch_channel",
+    "tiktok_username",
+    "sign_api_key",
+    "twitch_oauth_token",
+    "twitch_bot_username",
+    "twitch_client_id",
+    "twitch_client_secret",
+    "tiktok_sessionid",
+    "tiktok_target_idc",
+  ];
+
+  const ttsEnabledEl = document.getElementById("tts_enabled");
+  const ttsVoiceEl = document.getElementById("tts_voice");
+  const ttsVoiceHint = document.getElementById("tts-voice-hint");
+
+  let savedTtsVoice = "";
+
+  const templateListEl = document.getElementById("template-list");
+  const templateInputEl = document.getElementById("template-input");
+  const templateAddBtn = document.getElementById("template-add-btn");
+  let templates = [];
 
   function setStatus(text, kind) {
     status.textContent = text;
@@ -26,19 +47,137 @@
     saveBtn.textContent = busy ? "Saving…" : "Save & connect";
   }
 
-  function fillForm(data) {
-    fields.forEach((k) => {
-      const el = document.getElementById(k);
-      if (el) el.value = data[k] || "";
+  function populateVoices() {
+    if (!window.speechSynthesis) return;
+
+    const voices = window.speechSynthesis.getVoices();
+    const ruVoices = voices.filter(function (v) { return v.lang.startsWith("ru"); });
+
+    while (ttsVoiceEl.firstChild) {
+      ttsVoiceEl.removeChild(ttsVoiceEl.firstChild);
+    }
+
+    var autoOpt = document.createElement("option");
+    autoOpt.value = "";
+    autoOpt.textContent = "Auto (first Russian voice)";
+    ttsVoiceEl.appendChild(autoOpt);
+
+    if (ruVoices.length === 0) {
+      ttsVoiceEl.disabled = true;
+      ttsVoiceHint.textContent =
+        "No Russian voices found on this system. On macOS go to System Settings → Accessibility → Spoken Content → Manage Voices and add Russian (Milena). On Windows: Settings → Time & Language → Speech → Manage voices.";
+      ttsVoiceHint.classList.add("warn");
+    } else {
+      ttsVoiceEl.disabled = false;
+      ttsVoiceHint.textContent =
+        "Voices come from your operating system. On macOS enable 'Milena' (Russian) in System Settings → Accessibility → Spoken Content. On Windows install a Russian voice in Settings → Time & Language → Speech.";
+      ttsVoiceHint.classList.remove("warn");
+
+      ruVoices.forEach(function (v) {
+        var opt = document.createElement("option");
+        opt.value = v.name;
+        opt.textContent = v.name + " (" + v.lang + ")";
+        ttsVoiceEl.appendChild(opt);
+      });
+    }
+
+    if (savedTtsVoice) {
+      var found = false;
+      var opts = ttsVoiceEl.options;
+      for (var i = 0; i < opts.length; i++) {
+        if (opts[i].value === savedTtsVoice) { found = true; break; }
+      }
+      if (!found) {
+        var ghost = document.createElement("option");
+        ghost.value = savedTtsVoice;
+        ghost.textContent = savedTtsVoice + " (not installed)";
+        ttsVoiceEl.appendChild(ghost);
+      }
+      ttsVoiceEl.value = savedTtsVoice;
+    }
+  }
+
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = populateVoices;
+    populateVoices(); // Firefox already has voices; Chrome populates them asynchronously
+  } else {
+    ttsVoiceEl.disabled = true;
+    var unavailOpt = document.createElement("option");
+    unavailOpt.value = "";
+    unavailOpt.textContent = "Speech synthesis not available in this browser";
+    ttsVoiceEl.appendChild(unavailOpt);
+  }
+
+  function renderTemplates() {
+    while (templateListEl.firstChild) {
+      templateListEl.removeChild(templateListEl.firstChild);
+    }
+    templates.forEach(function (text, idx) {
+      var li = document.createElement("li");
+      li.className = "template-row";
+
+      var span = document.createElement("span");
+      span.className = "template-text";
+      span.textContent = text;
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn ghost";
+      removeBtn.textContent = "Remove";
+      (function (i) {
+        removeBtn.addEventListener("click", function () {
+          templates.splice(i, 1);
+          renderTemplates();
+        });
+      })(idx);
+
+      li.appendChild(span);
+      li.appendChild(removeBtn);
+      templateListEl.appendChild(li);
     });
   }
 
+  templateAddBtn.addEventListener("click", function () {
+    var val = templateInputEl.value.trim();
+    if (!val) return;
+    templates.push(val);
+    templateInputEl.value = "";
+    renderTemplates();
+  });
+
+  templateInputEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      templateAddBtn.click();
+    }
+  });
+
+  function fillForm(data) {
+    fields.forEach(function (k) {
+      var el = document.getElementById(k);
+      if (el) el.value = data[k] || "";
+    });
+
+    ttsEnabledEl.checked = !!data.tts_enabled;
+
+    savedTtsVoice = data.tts_voice || "";
+    populateVoices();
+
+    templates = Array.isArray(data.templates) ? data.templates.slice() : [];
+    renderTemplates();
+  }
+
   function readForm() {
-    const out = {};
-    fields.forEach((k) => {
-      const el = document.getElementById(k);
+    var out = {};
+    fields.forEach(function (k) {
+      var el = document.getElementById(k);
       out[k] = el ? el.value.trim() : "";
     });
+
+    out.tts_enabled = ttsEnabledEl.checked;
+    out.tts_voice = ttsVoiceEl.value;
+    out.templates = templates.slice();
+
     return out;
   }
 
@@ -80,7 +219,11 @@
       if (data.tiktok_username) sources.push("TikTok: " + data.tiktok_username);
       const summary = sources.length ? " (" + sources.join(", ") + ")" : "";
       setStatus(
-        "Saved! Reconnected " + (data.connectors || 0) + " source" + (data.connectors === 1 ? "" : "s") + summary,
+        "Saved! Reconnected " +
+          (data.connectors || 0) +
+          " source" +
+          (data.connectors === 1 ? "" : "s") +
+          summary,
         "success",
       );
     } catch (err) {

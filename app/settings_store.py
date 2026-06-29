@@ -1,9 +1,12 @@
 """Streamer-facing runtime settings, persisted to a JSON file next to the binary.
 
 Layered on top of ``.env``: anything written here overrides the corresponding
-``.env`` value at runtime. We deliberately persist only the three fields a
-non-technical user cares about (Twitch channel, TikTok handle, sign-api key);
-everything else (HOST/PORT/etc.) stays in ``.env`` as power-user overrides.
+``.env`` value at runtime. We persist the streamer-editable fields (channel /
+handle, the optional send + Helix credentials, and TTS / template preferences);
+infrastructure knobs (HOST/PORT/etc.) stay in ``.env`` as power-user overrides.
+
+The credentials stored here (OAuth token, client secret, TikTok session cookie)
+are sensitive; the file lives only in the local config dir and is never logged.
 """
 
 from __future__ import annotations
@@ -21,7 +24,33 @@ log = logging.getLogger("settings_store")
 
 SETTINGS_FILE = "settings.json"
 
-_RUNTIME_KEYS = ("twitch_channel", "tiktok_username", "sign_api_key")
+_STRING_KEYS = (
+    "twitch_channel",
+    "tiktok_username",
+    "sign_api_key",
+    "twitch_oauth_token",
+    "twitch_bot_username",
+    "twitch_client_id",
+    "twitch_client_secret",
+    "tiktok_sessionid",
+    "tiktok_target_idc",
+    "tts_voice",
+)
+_BOOL_KEYS = ("tts_enabled",)
+_LIST_KEYS = ("templates",)
+_RUNTIME_KEYS = _STRING_KEYS + _BOOL_KEYS + _LIST_KEYS
+
+
+def _coerce_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _coerce_list(value: object) -> list:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
 
 
 def settings_json_path(config_dir: Path) -> Path:
@@ -39,13 +68,22 @@ def load_runtime_settings(config_dir: Optional[Path]) -> dict:
     except (OSError, ValueError):
         log.warning("ignoring malformed %s", path, exc_info=True)
         return {}
-    return {k: str(raw.get(k, "")) for k in _RUNTIME_KEYS}
+    result: dict = {k: str(raw.get(k, "")) for k in _STRING_KEYS}
+    for k in _BOOL_KEYS:
+        result[k] = _coerce_bool(raw.get(k, False))
+    for k in _LIST_KEYS:
+        result[k] = _coerce_list(raw.get(k, []))
+    return result
 
 
 def save_runtime_settings(config_dir: Path, data: dict) -> Path:
     config_dir.mkdir(parents=True, exist_ok=True)
     target = settings_json_path(config_dir)
-    payload = {k: str(data.get(k, "")).strip() for k in _RUNTIME_KEYS}
+    payload: dict = {k: str(data.get(k, "")).strip() for k in _STRING_KEYS}
+    for k in _BOOL_KEYS:
+        payload[k] = _coerce_bool(data.get(k, False))
+    for k in _LIST_KEYS:
+        payload[k] = _coerce_list(data.get(k, []))
 
     fd, tmp_path = tempfile.mkstemp(prefix=".settings-", dir=str(config_dir))
     try:
@@ -62,17 +100,37 @@ def save_runtime_settings(config_dir: Path, data: dict) -> Path:
     return target
 
 
+_OPTIONAL_STRINGS = {
+    "sign_api_key": "SIGN_API_KEY",
+    "twitch_oauth_token": "TWITCH_OAUTH_TOKEN",
+    "twitch_bot_username": "TWITCH_BOT_USERNAME",
+    "twitch_client_id": "TWITCH_CLIENT_ID",
+    "twitch_client_secret": "TWITCH_CLIENT_SECRET",
+    "tiktok_sessionid": "TIKTOK_SESSIONID",
+    "tiktok_target_idc": "TIKTOK_TARGET_IDC",
+}
+_REQUIRED_MAP = {
+    "twitch_channel": "TWITCH_CHANNEL",
+    "tiktok_username": "TIKTOK_USERNAME",
+    "tts_voice": "TTS_VOICE",
+}
+
+
 def apply_runtime_settings(base: Settings, overrides: dict) -> Settings:
     if not overrides:
         return base
-    updates = {}
-    if "twitch_channel" in overrides:
-        updates["TWITCH_CHANNEL"] = overrides["twitch_channel"].strip()
-    if "tiktok_username" in overrides:
-        updates["TIKTOK_USERNAME"] = overrides["tiktok_username"].strip()
-    if "sign_api_key" in overrides:
-        key = overrides["sign_api_key"].strip()
-        updates["SIGN_API_KEY"] = key or None
+    updates: dict = {}
+    for key, field in _REQUIRED_MAP.items():
+        if key in overrides:
+            updates[field] = str(overrides[key]).strip()
+    for key, field in _OPTIONAL_STRINGS.items():
+        if key in overrides:
+            value = str(overrides[key]).strip()
+            updates[field] = value or None
+    if "tts_enabled" in overrides:
+        updates["TTS_ENABLED"] = _coerce_bool(overrides["tts_enabled"])
+    if "templates" in overrides:
+        updates["TEMPLATES"] = _coerce_list(overrides["templates"])
     return base.model_copy(update=updates) if updates else base
 
 
@@ -81,4 +139,13 @@ def settings_to_runtime_dict(settings: Settings) -> dict:
         "twitch_channel": settings.TWITCH_CHANNEL or "",
         "tiktok_username": settings.TIKTOK_USERNAME or "",
         "sign_api_key": settings.SIGN_API_KEY or "",
+        "twitch_oauth_token": settings.TWITCH_OAUTH_TOKEN or "",
+        "twitch_bot_username": settings.TWITCH_BOT_USERNAME or "",
+        "twitch_client_id": settings.TWITCH_CLIENT_ID or "",
+        "twitch_client_secret": settings.TWITCH_CLIENT_SECRET or "",
+        "tiktok_sessionid": settings.TIKTOK_SESSIONID or "",
+        "tiktok_target_idc": settings.TIKTOK_TARGET_IDC or "",
+        "tts_enabled": settings.TTS_ENABLED,
+        "tts_voice": settings.TTS_VOICE or "",
+        "templates": list(settings.TEMPLATES or []),
     }

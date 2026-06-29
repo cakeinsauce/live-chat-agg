@@ -14,6 +14,7 @@ Differs from ``app.main`` in three ways:
 from __future__ import annotations
 
 import logging
+import os
 import socket
 import sys
 import threading
@@ -28,6 +29,12 @@ from .server import create_app
 from .settings_store import apply_runtime_settings, load_runtime_settings
 
 log = logging.getLogger("launcher")
+
+
+def _desktop_requested() -> bool:
+    if "--desktop" in sys.argv[1:]:
+        return True
+    return os.environ.get("LCA_DESKTOP", "").strip().lower() in ("1", "true", "yes", "on")
 
 _DEFAULT_ENV_TEMPLATE = """\
 # live-chat-agg configuration
@@ -142,6 +149,12 @@ def main() -> None:
     open_host = "localhost" if host in ("0.0.0.0", "::") else host
     url = f"http://{open_host}:{port}"
 
+    app = create_app(settings, config_dir=config_dir)
+
+    if _desktop_requested():
+        _run_with_desktop(app, host, port, url)
+        return
+
     threading.Thread(
         target=_open_browser_when_ready,
         args=(url, host, port),
@@ -150,11 +163,44 @@ def main() -> None:
 
     log.info("starting live-chat-agg on %s (close this window to stop)", url)
 
-    app = create_app(settings, config_dir=config_dir)
     try:
         uvicorn.run(app, host=host, port=port, log_level="info")
     except KeyboardInterrupt:
         log.info("shutting down")
+
+
+def _run_with_desktop(app, host: str, port: int, url: str) -> None:
+    from . import desktop
+
+    if not desktop.is_available():
+        log.warning(
+            "desktop overlay requested but PySide6 is not installed; "
+            "falling back to browser. Install with 'pip install PySide6'."
+        )
+        threading.Thread(
+            target=_open_browser_when_ready,
+            args=(url, host, port),
+            daemon=True,
+        ).start()
+        log.info("starting live-chat-agg on %s (close this window to stop)", url)
+        try:
+            uvicorn.run(app, host=host, port=port, log_level="info")
+        except KeyboardInterrupt:
+            log.info("shutting down")
+        return
+
+    # Qt must own the main thread, so the ASGI server runs in the background.
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="info"))
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+
+    log.info("starting live-chat-agg desktop overlay on %s", url)
+    try:
+        desktop.run_desktop_window(url)
+    except KeyboardInterrupt:
+        log.info("shutting down")
+    finally:
+        server.should_exit = True
 
 
 if __name__ == "__main__":
