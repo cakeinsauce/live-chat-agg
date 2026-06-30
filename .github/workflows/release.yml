@@ -86,10 +86,17 @@ jobs:
         run: |
           ./dist/live-chat-agg.app/Contents/MacOS/live-chat-agg &
           PID=$!
-          sleep 8
-          curl -fsS http://127.0.0.1:8000/ | head -c 200
+          # Poll instead of a fixed sleep so the test does not race binary cold-start.
+          ok=
+          for i in $(seq 40); do
+            if ! kill -0 "$PID" 2>/dev/null; then echo "process exited early"; exit 1; fi
+            if curl -fsS -m 5 http://127.0.0.1:8000/ >/dev/null 2>&1; then ok=1; break; fi
+            sleep 3
+          done
+          if [ -z "$ok" ]; then echo "server did not come up in time"; kill $PID 2>/dev/null || true; exit 1; fi
+          curl -fsS -m 5 http://127.0.0.1:8000/ | head -c 200
           echo
-          curl -fsS http://127.0.0.1:8000/static/overlay.css | head -c 200
+          curl -fsS -m 5 http://127.0.0.1:8000/static/overlay.css | head -c 200
           echo
           kill $PID || true
           wait $PID 2>/dev/null || true
@@ -98,11 +105,25 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # The onefile .exe self-extracts (~250 MB: PySide6 + Qt WebEngine + edge-tts)
+          # to %TEMP% on first launch, which can take well over 10s on a cold runner.
+          # Poll the server instead of sleeping a fixed amount so the smoke test does
+          # not race the cold-start extraction.
           $proc = Start-Process -FilePath "dist\live-chat-agg.exe" -PassThru -WindowStyle Hidden
-          Start-Sleep -Seconds 10
           try {
-            $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/"
-            if ($r.StatusCode -ne 200) { throw "unexpected status $($r.StatusCode)" }
+            $ok = $false
+            for ($i = 1; $i -le 40; $i++) {
+              if ($proc.HasExited) { throw "process exited early with code $($proc.ExitCode)" }
+              try {
+                $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri "http://127.0.0.1:8000/"
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {
+                Start-Sleep -Seconds 3
+              }
+            }
+            if (-not $ok) { throw "server did not serve http://127.0.0.1:8000/ within timeout" }
+            $css = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri "http://127.0.0.1:8000/static/overlay.css"
+            if ($css.StatusCode -ne 200) { throw "overlay.css status $($css.StatusCode)" }
             Write-Host "smoke OK"
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
