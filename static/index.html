@@ -7,16 +7,17 @@
     <link rel="stylesheet" href="/static/overlay.css" />
   </head>
   <body>
+    <div id="topbar" class="topbar">
+      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+      <span id="duration" class="duration">0:00:00</span>
+      <span class="topbar-spacer"></span>
+      <button id="lock-btn" class="topbar-btn" type="button" title="Lock overlay" aria-label="Lock overlay">🔓</button>
+      <a id="settings-link" class="topbar-btn" href="/settings" title="Settings" aria-label="Settings">⚙</a>
+    </div>
     <div id="stats" class="stats"></div>
     <div id="pinned" class="pinned" hidden></div>
     <div id="gifts" class="gifts"></div>
     <div id="chat" class="chat"></div>
-    <div id="chrome" class="chrome">
-      <a class="chrome-btn" href="/settings" title="Settings" aria-label="Settings">
-        <span class="chrome-icon" aria-hidden="true">⚙</span>
-        <span class="chrome-label">Settings</span>
-      </a>
-    </div>
     <div id="composer-mount"></div>
     <script src="/static/tts.js"></script>
     <script src="/static/overlay.js"></script>

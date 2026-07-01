@@ -155,6 +155,7 @@ class BlockPayload(BaseModel):
 
 class PinPayload(BaseModel):
     message: dict = {}
+    auto_hide_ms: Optional[int] = None
 
 
 def create_app(settings: Settings | None = None, config_dir: Optional[Path] = None) -> FastAPI:
@@ -339,7 +340,18 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
     @app.post("/api/pin")
     async def api_pin(body: PinPayload):
         bus: EventBus = app.state.bus
-        await bus.publish_wire({"type": "pin", "message": body.message})
+        await bus.publish_wire(
+            {"type": "pin", "message": body.message, "auto_hide_ms": body.auto_hide_ms}
+        )
+        return {"status": "ok"}
+
+    @app.post("/api/show")
+    async def api_show(body: PinPayload):
+        bus: EventBus = app.state.bus
+        auto_hide_ms = body.auto_hide_ms if body.auto_hide_ms is not None else 5000
+        await bus.publish_wire(
+            {"type": "pin", "message": body.message, "auto_hide_ms": auto_hide_ms}
+        )
         return {"status": "ok"}
 
     @app.post("/api/unpin")

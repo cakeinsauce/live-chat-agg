@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+_NOT_STARTED = 0.0
+
 from .bus import EventBus
 from .models import StatsSnapshot
 
@@ -43,29 +45,34 @@ class StatsState:
         self._snapshot = StatsSnapshot()
         self._dirty = True
 
+    def _touch(self) -> None:
+        if self._snapshot.started_at == _NOT_STARTED:
+            self._snapshot.started_at = time.time()
+        self._dirty = True
+
     def set_tiktok_viewers(self, value: int) -> None:
         self._snapshot.tiktok_viewers = max(0, int(value))
-        self._dirty = True
+        self._touch()
 
     def set_tiktok_likes(self, total: int) -> None:
         self._snapshot.tiktok_likes = max(self._snapshot.tiktok_likes, int(total))
-        self._dirty = True
+        self._touch()
 
     def add_tiktok_gifts(self, count: int = 1) -> None:
         self._snapshot.tiktok_gifts += max(0, int(count))
-        self._dirty = True
+        self._touch()
 
     def add_tiktok_subs(self, count: int = 1) -> None:
         self._snapshot.tiktok_subs += max(0, int(count))
-        self._dirty = True
+        self._touch()
 
     def set_twitch_viewers(self, value: int) -> None:
         self._snapshot.twitch_viewers = max(0, int(value))
-        self._dirty = True
+        self._touch()
 
     def add_twitch_subs(self, count: int = 1) -> None:
         self._snapshot.twitch_subs += max(0, int(count))
-        self._dirty = True
+        self._touch()
 
     def snapshot_wire(self) -> dict:
         self._snapshot.timestamp = time.time()

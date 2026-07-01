@@ -125,6 +125,7 @@ class StatsSnapshot:
     tiktok_likes: int = 0
     twitch_viewers: int = 0
     twitch_subs: int = 0
+    started_at: float = 0.0  # epoch seconds of first session activity; 0 if not started
     timestamp: float = 0.0
 
     def to_wire(self, include_raw: bool = False) -> dict:
@@ -140,5 +141,6 @@ class StatsSnapshot:
                 "viewers": self.twitch_viewers,
                 "subs": self.twitch_subs,
             },
+            "started_at": self.started_at,
             "timestamp": self.timestamp,
         }

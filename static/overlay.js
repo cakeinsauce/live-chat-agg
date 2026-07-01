@@ -12,13 +12,17 @@
 
   const obsLike = params.get("bg") === "transparent" && showSource;
   const chromeHidden = params.get("chrome") === "0" || obsLike;
-  const chromeEl = document.getElementById("chrome");
-  if (chromeEl && chromeHidden) chromeEl.hidden = true;
+  if (chromeHidden) document.body.classList.add("chrome-hidden");
 
   const chat = document.getElementById("chat");
   const statsEl = document.getElementById("stats");
   const pinnedEl = document.getElementById("pinned");
   const giftsEl = document.getElementById("gifts");
+  const durationEl = document.getElementById("duration");
+  const lockBtn = document.getElementById("lock-btn");
+
+  let streamStartedAt = 0;
+  let pinHideTimer = null;
 
   const MAX_GIFTS = 8;
   const giftMap = new Map();
@@ -70,27 +74,43 @@
       row.remove();
     });
 
+    function messagePayload() {
+      return {
+        platform: row.dataset.platform,
+        user_id:  row.dataset.userId,
+        username: row.dataset.username,
+        text:     row.dataset.msgText,
+        color:    row.dataset.color || undefined,
+      };
+    }
+
+    const showBtn = document.createElement("button");
+    showBtn.className = "mod-btn mod-show";
+    showBtn.textContent = "\uD83D\uDCE2";
+    showBtn.title = "Show to viewers for 5s";
+    showBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      fetch("/api/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: messagePayload() }),
+      }).catch(() => {});
+    });
+
     const pinBtn = document.createElement("button");
     pinBtn.className = "mod-btn mod-pin";
     pinBtn.textContent = "\uD83D\uDCCC";
-    pinBtn.title = "Pin message";
+    pinBtn.title = "Pin message (until unpinned)";
     pinBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       fetch("/api/pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: {
-            platform: row.dataset.platform,
-            user_id:  row.dataset.userId,
-            username: row.dataset.username,
-            text:     row.dataset.msgText,
-            color:    row.dataset.color || undefined,
-          },
-        }),
+        body: JSON.stringify({ message: messagePayload() }),
       }).catch(() => {});
     });
 
+    actions.appendChild(showBtn);
     actions.appendChild(blockBtn);
     actions.appendChild(pinBtn);
     row.appendChild(actions);
@@ -118,18 +138,16 @@
       }
     }
 
-    (msg.badges || []).forEach((b) => {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = b;
-      row.appendChild(badge);
-    });
-
     const name = document.createElement("span");
     name.className = "username " + (msg.platform || "");
     name.textContent = msg.username;
     if (msg.color) name.style.color = msg.color;
     row.appendChild(name);
+
+    const sep = document.createElement("span");
+    sep.className = "msg-sep";
+    sep.textContent = ":";
+    row.appendChild(sep);
 
     const text = document.createElement("span");
     text.className = "text";
@@ -196,6 +214,26 @@
     card.dataset.platform = String(msg.platform || "");
     card.dataset.userId = String(msg.user_id || "");
 
+    const gUser = document.createElement("span");
+    gUser.className = "gift-user";
+    gUser.textContent = msg.username || "";
+    card.appendChild(gUser);
+
+    const verb = document.createElement("span");
+    verb.className = "gift-verb";
+    verb.textContent = " \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u043b(-\u0430) \u00ab";
+    card.appendChild(verb);
+
+    const gName = document.createElement("span");
+    gName.className = "gift-name";
+    gName.textContent = msg.gift_name || "Gift";
+    card.appendChild(gName);
+
+    const closeQuote = document.createElement("span");
+    closeQuote.className = "gift-verb";
+    closeQuote.textContent = "\u00bb ";
+    card.appendChild(closeQuote);
+
     if (msg.gift_image) {
       const img = document.createElement("img");
       img.className = "gift-img";
@@ -207,21 +245,6 @@
     } else {
       card.appendChild(makeGiftGlyph());
     }
-
-    const info = document.createElement("div");
-    info.className = "gift-info";
-
-    const gName = document.createElement("div");
-    gName.className = "gift-name";
-    gName.textContent = msg.gift_name || "Gift";
-    info.appendChild(gName);
-
-    const gUser = document.createElement("div");
-    gUser.className = "gift-user";
-    gUser.textContent = msg.username || "";
-    info.appendChild(gUser);
-
-    card.appendChild(info);
 
     const countEl = document.createElement("span");
     countEl.className = "gift-count";
@@ -240,65 +263,66 @@
     }
   }
 
-  function makeStatsCol(platform, heading, fields) {
-    const col = document.createElement("div");
-    col.className = "stats-col " + platform;
+  function makeStatsStrip(platform, fields) {
+    const strip = document.createElement("div");
+    strip.className = "stats-strip " + platform;
 
-    const h = document.createElement("div");
-    h.className = "stats-heading";
-    h.textContent = heading;
-    col.appendChild(h);
-
-    const row = document.createElement("div");
-    row.className = "stats-row";
-
-    fields.forEach((field) => {
-      const s = document.createElement("div");
+    fields.forEach(({ field, icon }) => {
+      const s = document.createElement("span");
       s.className = "stat";
       s.dataset.field = field;
 
-      const val = document.createElement("div");
+      const ic = document.createElement("span");
+      ic.className = "stat-icon";
+      ic.textContent = icon;
+      s.appendChild(ic);
+
+      const val = document.createElement("span");
       val.className = "stat-value";
       val.textContent = "\u2013";
       s.appendChild(val);
 
-      const lbl = document.createElement("div");
-      lbl.className = "stat-label";
-      lbl.textContent = field;
-      s.appendChild(lbl);
-
-      row.appendChild(s);
+      strip.appendChild(s);
     });
 
-    col.appendChild(row);
-    return col;
+    return strip;
   }
 
   function applyStats(msg) {
     if (!statsEl) return;
 
-    let tiktokCol = statsEl.querySelector(".stats-col.tiktok");
-    let twitchCol = statsEl.querySelector(".stats-col.twitch");
+    if (typeof msg.started_at === "number") streamStartedAt = msg.started_at;
 
-    if (!tiktokCol) {
-      tiktokCol = makeStatsCol("tiktok", "TikTok", ["viewers", "gifts", "subs", "likes"]);
-      statsEl.appendChild(tiktokCol);
+    let tiktokStrip = statsEl.querySelector(".stats-strip.tiktok");
+    let twitchStrip = statsEl.querySelector(".stats-strip.twitch");
+
+    if (!tiktokStrip) {
+      tiktokStrip = makeStatsStrip("tiktok", [
+        { field: "viewers", icon: "\uD83D\uDC41" },
+        { field: "gifts", icon: "\uD83C\uDF81" },
+        { field: "subs", icon: "\u2795" },
+        { field: "likes", icon: "\u2764\uFE0F" },
+      ]);
+      statsEl.appendChild(tiktokStrip);
     }
-    if (!twitchCol) {
-      twitchCol = makeStatsCol("twitch", "Twitch", ["viewers", "subs"]);
-      statsEl.appendChild(twitchCol);
+    if (!twitchStrip) {
+      twitchStrip = makeStatsStrip("twitch", [
+        { field: "viewers", icon: "\uD83D\uDC41" },
+        { field: "subs", icon: "\u2795" },
+      ]);
+      statsEl.appendChild(twitchStrip);
     }
 
     const tt = msg.tiktok || {};
     const tw = msg.twitch || {};
 
     [["viewers", tt.viewers], ["gifts", tt.gifts], ["subs", tt.subs], ["likes", tt.likes]].forEach(([field, value]) => {
-      const el = tiktokCol.querySelector('.stat[data-field="' + field + '"] .stat-value');
+      const el = tiktokStrip.querySelector('.stat[data-field="' + field + '"] .stat-value');
       if (el) el.textContent = fmtNum(value);
     });
 
     [["viewers", tw.viewers], ["subs", tw.subs]].forEach(([field, value]) => {
-      const el = twitchCol.querySelector('.stat[data-field="' + field + '"] .stat-value');
+      const el = twitchStrip.querySelector('.stat[data-field="' + field + '"] .stat-value');
       if (el) el.textContent = fmtNum(value);
     });
   }
@@ -325,13 +349,15 @@
 
   function applyPin(msg) {
     if (!pinnedEl) return;
+    if (pinHideTimer) { clearTimeout(pinHideTimer); pinHideTimer = null; }
     while (pinnedEl.firstChild) pinnedEl.removeChild(pinnedEl.firstChild);
 
     const inner = msg.message || {};
+    const autoHide = typeof msg.auto_hide_ms === "number" && msg.auto_hide_ms > 0;
 
     const lbl = document.createElement("div");
     lbl.className = "pinned-label";
-    lbl.textContent = "Pinned";
+    lbl.textContent = autoHide ? "On screen" : "Pinned";
     pinnedEl.appendChild(lbl);
 
     const row = document.createElement("div");
@@ -343,6 +369,11 @@
     if (inner.color) name.style.color = inner.color;
     row.appendChild(name);
 
+    const sep = document.createElement("span");
+    sep.className = "msg-sep";
+    sep.textContent = ":";
+    row.appendChild(sep);
+
     const text = document.createElement("span");
     text.className = "text";
     text.textContent = inner.text || "";
@@ -350,9 +381,17 @@
 
     pinnedEl.appendChild(row);
     pinnedEl.hidden = false;
+
+    if (autoHide) {
+      pinHideTimer = setTimeout(() => {
+        pinnedEl.hidden = true;
+        pinHideTimer = null;
+      }, msg.auto_hide_ms);
+    }
   }
 
   function applyUnpin() {
+    if (pinHideTimer) { clearTimeout(pinHideTimer); pinHideTimer = null; }
     if (pinnedEl) pinnedEl.hidden = true;
   }
 
@@ -656,9 +695,45 @@
     loadTemplates();
   }
 
+  function fmtDuration(totalSec) {
+    if (totalSec < 0) totalSec = 0;
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = Math.floor(totalSec % 60);
+    const pad = (n) => String(n).padStart(2, "0");
+    return h + ":" + pad(m) + ":" + pad(s);
+  }
+
+  function tickDuration() {
+    if (!durationEl) return;
+    if (!streamStartedAt) {
+      durationEl.textContent = "0:00:00";
+      return;
+    }
+    durationEl.textContent = fmtDuration(Date.now() / 1000 - streamStartedAt);
+  }
+
+  function initLock() {
+    if (!lockBtn) return;
+    function apply(locked) {
+      document.body.classList.toggle("locked", locked);
+      lockBtn.textContent = locked ? "\uD83D\uDD12" : "\uD83D\uDD13";
+      lockBtn.title = locked ? "Unlock overlay" : "Lock overlay";
+    }
+    apply(localStorage.getItem("overlay.locked") === "1");
+    lockBtn.addEventListener("click", () => {
+      const next = !document.body.classList.contains("locked");
+      localStorage.setItem("overlay.locked", next ? "1" : "0");
+      apply(next);
+    });
+  }
+
   connect();
 
   try { if (window.ChatTTS && window.ChatTTS.init) window.ChatTTS.init(); } catch (_) {}
 
   initComposer();
+  initLock();
+  tickDuration();
+  setInterval(tickDuration, 1000);
 })();
