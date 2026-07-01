@@ -1,11 +1,11 @@
 (function () {
   const params = new URLSearchParams(window.location.search);
-  const bg = params.get("bg") || "transparent";
+  const bg = params.get("bg") || "dark";
   const limit = parseInt(params.get("limit") || "100", 10);
   const showSource = params.get("showsource") === "1";
   const fontSize = params.get("fontsize");
 
-  document.body.classList.add("bg-" + (["transparent", "dark", "light"].includes(bg) ? bg : "transparent"));
+  document.body.classList.add("bg-" + (["transparent", "dark", "light"].includes(bg) ? bg : "dark"));
   if (fontSize) {
     document.documentElement.style.setProperty("--fontsize", parseInt(fontSize, 10) + "px");
   }
@@ -80,7 +80,6 @@
         user_id:  row.dataset.userId,
         username: row.dataset.username,
         text:     row.dataset.msgText,
-        color:    row.dataset.color || undefined,
       };
     }
 
@@ -123,7 +122,6 @@
     row.dataset.userId   = String(msg.user_id  || "");
     row.dataset.username = String(msg.username  || "");
     row.dataset.msgText  = String(msg.text      || "");
-    row.dataset.color    = String(msg.color     || "");
 
     if (showSource) {
       if (msg.avatar_url) {
@@ -141,7 +139,6 @@
     const name = document.createElement("span");
     name.className = "username " + (msg.platform || "");
     name.textContent = msg.username;
-    if (msg.color) name.style.color = msg.color;
     row.appendChild(name);
 
     const sep = document.createElement("span");
@@ -171,7 +168,6 @@
     const name = document.createElement("span");
     name.className = "username " + (msg.platform || "");
     name.textContent = msg.username;
-    if (msg.color) name.style.color = msg.color;
     row.appendChild(name);
 
     const label = document.createElement("span");
@@ -366,7 +362,6 @@
     const name = document.createElement("span");
     name.className = "username " + (inner.platform || "");
     name.textContent = inner.username || "";
-    if (inner.color) name.style.color = inner.color;
     row.appendChild(name);
 
     const sep = document.createElement("span");
@@ -728,12 +723,32 @@
     });
   }
 
+  function initOpacity() {
+    const slider = document.getElementById("opacity-slider");
+    if (!slider) return;
+    const saved = parseInt(localStorage.getItem("overlay.panel_alpha") || "", 10);
+    const initial = Number.isFinite(saved) && saved >= 20 && saved <= 100 ? saved : 85;
+    function apply(percent) {
+      const clamped = Math.max(20, Math.min(100, percent));
+      document.documentElement.style.setProperty("--panel-alpha", (clamped / 100).toFixed(3));
+      slider.value = String(clamped);
+    }
+    apply(initial);
+    slider.addEventListener("input", () => {
+      const val = parseInt(slider.value, 10);
+      if (!Number.isFinite(val)) return;
+      apply(val);
+      localStorage.setItem("overlay.panel_alpha", String(val));
+    });
+  }
+
   connect();
 
   try { if (window.ChatTTS && window.ChatTTS.init) window.ChatTTS.init(); } catch (_) {}
 
   initComposer();
   initLock();
+  initOpacity();
   tickDuration();
   setInterval(tickDuration, 1000);
 })();
