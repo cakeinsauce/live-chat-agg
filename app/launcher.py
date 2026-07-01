@@ -36,6 +36,25 @@ def _desktop_requested() -> bool:
         return True
     return os.environ.get("LCA_DESKTOP", "").strip().lower() in ("1", "true", "yes", "on")
 
+
+def _desktop_client_url() -> str | None:
+    """Return the URL if invoked as ``--desktop-client URL``, else None.
+
+    This subprocess mode is spawned by the running server (``/api/desktop/spawn``)
+    to open just the Qt overlay window connected to an already-running instance.
+    Handled here (not in ``app.desktop_client``) so the PyInstaller frozen binary
+    can dispatch it directly \u2014 the bootloader ignores ``-m`` and always runs the
+    single ``run_packaged.py`` \u2192 ``launcher.main`` entry point.
+    """
+    argv = sys.argv[1:]
+    try:
+        idx = argv.index("--desktop-client")
+    except ValueError:
+        return None
+    if idx + 1 >= len(argv):
+        return None
+    return argv[idx + 1]
+
 _DEFAULT_ENV_TEMPLATE = """\
 # live-chat-agg configuration
 #
@@ -125,6 +144,11 @@ def _open_browser_when_ready(url: str, host: str, port: int, timeout: float = 30
 
 
 def main() -> None:
+    client_url = _desktop_client_url()
+    if client_url is not None:
+        _run_as_desktop_client(client_url)
+        return
+
     config_dir = _config_dir()
     env_path = config_dir / ".env"
     log_file = config_dir / "live-chat-agg.log"
@@ -201,6 +225,31 @@ def _run_with_desktop(app, host: str, port: int, url: str) -> None:
         log.info("shutting down")
     finally:
         server.should_exit = True
+
+
+def _run_as_desktop_client(url: str) -> None:
+    config_dir = _config_dir()
+    log_file = config_dir / "desktop-client.log"
+    _setup_logging(log_file)
+    log.info("desktop-client mode: opening overlay for %s", url)
+
+    from . import desktop
+
+    if not desktop.is_available():
+        log.error(
+            "desktop-client mode requested but PySide6 is not available in this build; "
+            "the pop-out feature requires PySide6 to be bundled"
+        )
+        sys.exit(3)
+
+    try:
+        desktop.run_desktop_window(url)
+    except desktop.PySide6NotInstalled as exc:
+        log.error("desktop-client failed to start: %s", exc)
+        sys.exit(3)
+    except Exception:
+        log.exception("desktop-client crashed")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

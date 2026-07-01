@@ -383,13 +383,20 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
         if _desktop_running():
             raise HTTPException(status_code=409, detail="desktop overlay already running")
         base = str(request.base_url).rstrip("/") + "/"
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "app.desktop_client", base],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable, "--desktop-client", base]
+        else:
+            cmd = [sys.executable, "-m", "app.launcher", "--desktop-client", base]
+        cd: Optional[Path] = app.state.config_dir
+        spawn_log_path = (cd or Path.home() / ".live-chat-agg") / "desktop-spawn.log"
+        spawn_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(spawn_log_path, "ab", buffering=0) as spawn_log:
+            proc = subprocess.Popen(cmd, stdout=spawn_log, stderr=spawn_log)
         app.state.desktop_process = proc
-        log.info("spawned desktop overlay subprocess pid=%d url=%s", proc.pid, base)
+        log.info(
+            "spawned desktop overlay subprocess pid=%d cmd=%r log=%s",
+            proc.pid, cmd, spawn_log_path,
+        )
         return {"status": "ok", "pid": proc.pid}
 
     @app.websocket("/ws")
