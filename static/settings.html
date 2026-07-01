@@ -225,6 +225,28 @@
           <p class="hint">Saved phrases you can quickly insert when sending a message from the overlay.</p>
         </details>
 
+        <details class="advanced">
+          <summary>Desktop overlay</summary>
+          <div class="field">
+            <label for="lock_hotkey">Lock hotkey</label>
+            <input
+              id="lock_hotkey"
+              name="lock_hotkey"
+              type="text"
+              placeholder="&lt;ctrl&gt;+&lt;alt&gt;+l"
+              spellcheck="false"
+              autocapitalize="off"
+            />
+            <p class="hint">
+              Global hotkey to lock/unlock the desktop overlay (makes it click-through so you
+              can't misclick it during a game). Works even while a game is focused. Format:
+              <code>&lt;ctrl&gt;+&lt;alt&gt;+l</code>, <code>&lt;cmd&gt;+&lt;shift&gt;+o</code>.
+              Leave blank to use the lock button only. On macOS the app needs Accessibility
+              permission (System Settings → Privacy &amp; Security → Accessibility).
+            </p>
+          </div>
+        </details>
+
         <div class="actions">
           <button type="submit" class="btn primary" id="save-btn">Save &amp; connect</button>
           <button type="button" class="btn secondary" id="reconnect-btn">Reconnect</button>

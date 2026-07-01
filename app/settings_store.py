@@ -37,6 +37,7 @@ _STRING_KEYS = (
     "tts_voice",
     "tts_engine",
     "tts_neural_voice",
+    "lock_hotkey",
 )
 _BOOL_KEYS = ("tts_enabled", "enable_test_messages", "tts_fallback_to_browser")
 _LIST_KEYS = ("templates",)
@@ -117,6 +118,7 @@ _REQUIRED_MAP = {
     "tts_voice": "TTS_VOICE",
     "tts_engine": "TTS_ENGINE",
     "tts_neural_voice": "TTS_NEURAL_VOICE",
+    "lock_hotkey": "LOCK_HOTKEY",
 }
 
 
@@ -157,6 +159,7 @@ def settings_to_runtime_dict(settings: Settings) -> dict:
         "tts_engine": settings.TTS_ENGINE or "browser",
         "tts_voice": settings.TTS_VOICE or "",
         "tts_neural_voice": settings.TTS_NEURAL_VOICE or "",
+        "lock_hotkey": settings.LOCK_HOTKEY or "",
         "tts_fallback_to_browser": settings.TTS_FALLBACK_TO_BROWSER,
         "templates": list(settings.TEMPLATES or []),
         "enable_test_messages": settings.ENABLE_TEST_MESSAGES,

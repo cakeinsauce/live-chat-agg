@@ -16,6 +16,7 @@
     "twitch_client_secret",
     "tiktok_sessionid",
     "tiktok_target_idc",
+    "lock_hotkey",
   ];
 
   const ttsEnabledEl = document.getElementById("tts_enabled");

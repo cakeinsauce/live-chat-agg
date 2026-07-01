@@ -7,4 +7,5 @@ pydantic-settings
 python-dotenv
 httpx
 PySide6
+pynput
 edge-tts

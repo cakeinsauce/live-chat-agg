@@ -4,6 +4,8 @@
   --fontsize: 18px;
   --text: #ffffff;
   --panel-alpha: 0.85;
+  /* chat-column background alpha; 0 keeps OBS transparent capture unaffected */
+  --chat-bg-alpha: 0;
   --card-bg: rgba(8, 8, 14, calc(var(--panel-alpha) * 0.7));
   --card-blur: 10px;
   --card-radius: 10px;
@@ -332,13 +334,15 @@ body.bg-light {
   position: absolute;
   bottom: 0;
   left: 0;
-  right: 0;
+  /* end before the gifts strip so the background panel never tints gifts */
+  right: var(--gifts-right-offset);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 5px;
   padding: 12px;
-  padding-right: var(--gifts-right-offset);
+  background: rgba(8, 8, 14, var(--chat-bg-alpha));
+  border-radius: 12px;
   /* prevents rows from scrolling under the topbar + stats area at top */
   max-height: calc(100% - var(--topbar-h) - 90px);
   overflow: hidden;
@@ -816,10 +820,16 @@ body.bg-light .composer-btn:hover { background: rgba(0, 0, 0, 0.1); color: #111;
   border-color: rgba(74, 222, 128, 0.5);
 }
 
+body.locked .topbar,
 body.locked .composer,
 body.locked .mod-actions,
-body.locked #settings-link {
+body.locked #settings-link,
+body.locked #composer-mount {
   display: none !important;
+}
+
+body.locked .chat {
+  max-height: 100%;
 }
 
 body.chrome-hidden #lock-btn,

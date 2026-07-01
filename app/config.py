@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     # Quick-send message templates editable from the settings page.
     TEMPLATES: List[str] = []
 
+    # Global hotkey that toggles the desktop overlay's locked (click-through)
+    # mode, in pynput GlobalHotKeys syntax e.g. "<ctrl>+<alt>+l". Empty
+    # disables the global hotkey (button-only). Only used in desktop mode.
+    LOCK_HOTKEY: str = "<ctrl>+<alt>+l"
+
     # When no real connector is configured the overlay can be fed synthetic demo
     # chat so the layout/TTS can be exercised before going live. Off by default
     # so a freshly-launched, unconfigured instance shows an empty chat, not fakes.

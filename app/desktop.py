@@ -91,8 +91,40 @@ def _save_geometry(path: Path, x: int, y: int, w: int, h: int) -> None:
         log.warning("failed to persist desktop overlay geometry: %s", exc)
 
 
+def _start_lock_hotkey(hotkey: str, on_activate):
+    """Start a global (system-wide) hotkey that fires ``on_activate``.
+
+    Returns the running listener (with a ``.stop()`` method) or ``None`` when
+    the hotkey is disabled, pynput is unavailable, or the spec is invalid.
+    Failures are non-fatal: the overlay still works via the lock button.
+    """
+    if not hotkey.strip():
+        return None
+    try:
+        from pynput import keyboard
+    except Exception as exc:
+        log.warning(
+            "global lock hotkey %r unavailable (pynput not installed: %s); "
+            "use the lock button instead",
+            hotkey,
+            exc,
+        )
+        return None
+    try:
+        listener = keyboard.GlobalHotKeys({hotkey: on_activate})
+        listener.daemon = True
+        listener.start()
+    except Exception as exc:
+        log.warning("failed to register global lock hotkey %r: %s", hotkey, exc)
+        return None
+    log.info("global lock hotkey registered: %s", hotkey)
+    return listener
+
+
 def run_desktop_window(
-    url: str, geometry_path: Optional[Path] = None
+    url: str,
+    geometry_path: Optional[Path] = None,
+    lock_hotkey: str = "",
 ) -> int:
     """Open the overlay ``url`` in an always-on-top, translucent, INTERACTIVE
     Qt window and run the Qt event loop until the window is closed.
@@ -108,7 +140,7 @@ def run_desktop_window(
     Returns the Qt application's exit code.
     """
     try:
-        from PySide6.QtCore import QEvent, QPoint, Qt, QUrl
+        from PySide6.QtCore import QEvent, QPoint, Qt, QUrl, Signal
         from PySide6.QtGui import QColor, QMouseEvent
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
@@ -130,6 +162,11 @@ def run_desktop_window(
     app = QApplication.instance() or QApplication([])
 
     class OverlayWindow(QMainWindow):
+        # Emitted from the pynput listener thread; a queued connection
+        # marshals the toggle onto the Qt main thread, where mutating widget
+        # attributes / running JS is the only safe option.
+        toggle_lock_requested = Signal()
+
         def __init__(self) -> None:
             super().__init__()
             self.setWindowFlags(
@@ -162,7 +199,9 @@ def run_desktop_window(
 
             self._drag_press_global: Optional[QPoint] = None
             self._drag_armed = False
+            self._locked = False
 
+            self.toggle_lock_requested.connect(self._toggle_lock)
             self.web.page().urlChanged.connect(self._on_url_changed)
 
             # QWebEngineView routes mouse events through an internal
@@ -226,8 +265,20 @@ def run_desktop_window(
             # cannot guarantee.
 
         def _set_click_through(self, on: bool) -> None:
+            self._locked = on
             self.setAttribute(Qt.WA_TransparentForMouseEvents, on)
             log.info("desktop overlay click-through=%s", on)
+
+        def _toggle_lock(self) -> None:
+            target = not self._locked
+            self._set_click_through(target)
+            # Mirror the state into the browser overlay so its lock button,
+            # topbar visibility, and body.locked class stay in sync when the
+            # toggle originates from the global hotkey rather than a UI click.
+            js = "window.__setLocked && window.__setLocked(%s)" % (
+                "true" if target else "false"
+            )
+            self.web.page().runJavaScript(js)
 
         def eventFilter(self, obj, event):
             et = event.type()
@@ -301,8 +352,14 @@ def run_desktop_window(
     win.apply_saved_geometry()
     win.show()
 
+    listener = _start_lock_hotkey(lock_hotkey, win.toggle_lock_requested.emit)
+
     log.info(
         "desktop overlay window open at %s (always-on-top, interactive)",
         overlay_url,
     )
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        if listener is not None:
+            listener.stop()

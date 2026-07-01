@@ -176,7 +176,7 @@ def main() -> None:
     app = create_app(settings, config_dir=config_dir)
 
     if _desktop_requested():
-        _run_with_desktop(app, host, port, url)
+        _run_with_desktop(app, host, port, url, settings.LOCK_HOTKEY)
         return
 
     threading.Thread(
@@ -193,7 +193,9 @@ def main() -> None:
         log.info("shutting down")
 
 
-def _run_with_desktop(app, host: str, port: int, url: str) -> None:
+def _run_with_desktop(
+    app, host: str, port: int, url: str, lock_hotkey: str = ""
+) -> None:
     from . import desktop
 
     if not desktop.is_available():
@@ -220,7 +222,7 @@ def _run_with_desktop(app, host: str, port: int, url: str) -> None:
 
     log.info("starting live-chat-agg desktop overlay on %s", url)
     try:
-        desktop.run_desktop_window(url)
+        desktop.run_desktop_window(url, lock_hotkey=lock_hotkey)
     except KeyboardInterrupt:
         log.info("shutting down")
     finally:
@@ -233,6 +235,11 @@ def _run_as_desktop_client(url: str) -> None:
     _setup_logging(log_file)
     log.info("desktop-client mode: opening overlay for %s", url)
 
+    settings = Settings(_env_file=str(config_dir / ".env"))
+    runtime_overrides = load_runtime_settings(config_dir)
+    if runtime_overrides:
+        settings = apply_runtime_settings(settings, runtime_overrides)
+
     from . import desktop
 
     if not desktop.is_available():
@@ -243,7 +250,7 @@ def _run_as_desktop_client(url: str) -> None:
         sys.exit(3)
 
     try:
-        desktop.run_desktop_window(url)
+        desktop.run_desktop_window(url, lock_hotkey=settings.LOCK_HOTKEY)
     except desktop.PySide6NotInstalled as exc:
         log.error("desktop-client failed to start: %s", exc)
         sys.exit(3)

@@ -713,20 +713,25 @@
 
   function initLock() {
     if (!lockBtn) return;
-    function apply(locked) {
+    function apply(locked, silent) {
       document.body.classList.toggle("locked", locked);
       lockBtn.textContent = locked ? "\uD83D\uDD12" : "\uD83D\uDD13";
       lockBtn.title = locked ? "Unlock overlay" : "Lock overlay";
-      if (desktopMode) {
+      localStorage.setItem("overlay.locked", locked ? "1" : "0");
+      if (desktopMode && !silent) {
         location.hash = (locked ? "lock-" : "unlock-") + Date.now();
       }
     }
-    apply(localStorage.getItem("overlay.locked") === "1");
+    apply(localStorage.getItem("overlay.locked") === "1", true);
     lockBtn.addEventListener("click", () => {
-      const next = !document.body.classList.contains("locked");
-      localStorage.setItem("overlay.locked", next ? "1" : "0");
-      apply(next);
+      apply(!document.body.classList.contains("locked"));
     });
+    // Driven by the Qt global hotkey (runJavaScript) so a system-wide
+    // keypress toggles lock even while a game holds keyboard focus. 'silent'
+    // avoids echoing a hash change back to Qt, which already set the state.
+    window.__setLocked = (locked) => apply(!!locked, true);
+    window.__toggleLocked = () =>
+      apply(!document.body.classList.contains("locked"), true);
   }
 
   function initCloseButton() {
@@ -778,6 +783,25 @@
     });
   }
 
+  function initChatBg() {
+    const slider = document.getElementById("chat-bg-slider");
+    if (!slider) return;
+    const saved = parseInt(localStorage.getItem("overlay.chat_bg_alpha") || "", 10);
+    const initial = Number.isFinite(saved) && saved >= 0 && saved <= 100 ? saved : 0;
+    function apply(percent) {
+      const clamped = Math.max(0, Math.min(100, percent));
+      document.documentElement.style.setProperty("--chat-bg-alpha", (clamped / 100).toFixed(3));
+      slider.value = String(clamped);
+    }
+    apply(initial);
+    slider.addEventListener("input", () => {
+      const val = parseInt(slider.value, 10);
+      if (!Number.isFinite(val)) return;
+      apply(val);
+      localStorage.setItem("overlay.chat_bg_alpha", String(val));
+    });
+  }
+
   connect();
 
   try { if (window.ChatTTS && window.ChatTTS.init) window.ChatTTS.init(); } catch (_) {}
@@ -785,6 +809,7 @@
   initComposer();
   initLock();
   initOpacity();
+  initChatBg();
   initCloseButton();
   initPopoutButton();
   tickDuration();

@@ -128,6 +128,7 @@ class RuntimeSettingsPayload(BaseModel):
     tts_engine: str = "browser"
     tts_voice: str = ""
     tts_neural_voice: str = ""
+    lock_hotkey: str = ""
     tts_fallback_to_browser: bool = False
     templates: list[str] = []
     enable_test_messages: bool = False
