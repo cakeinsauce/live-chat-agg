@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -22,7 +23,7 @@ from .connectors.twitch import TwitchConnector
 from .connectors.twitch_helix import TwitchHelixPoller
 from .models import ChatMessage, stable_color
 from .stats import StatsState
-from . import tts_neural
+from . import desktop, tts_neural
 from .settings_store import (
     apply_runtime_settings,
     load_runtime_settings,
@@ -177,6 +178,7 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
             engine = tts_neural.NeuralTTSEngine()
             engine.start()
             app.state.tts_neural = engine
+        app.state.desktop_process = None
         stats.start()
         coros, connectors = build_connector_tasks(bus, settings, stats)
         app.state.connector_tasks = [asyncio.create_task(coro) for coro in coros]
@@ -189,6 +191,12 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
             await stats.stop()
             if app.state.tts_neural is not None:
                 await app.state.tts_neural.aclose()
+            proc = app.state.desktop_process
+            if proc is not None and proc.poll() is None:
+                try:
+                    proc.terminate()
+                except Exception:
+                    log.debug("desktop terminate failed", exc_info=True)
             log.info("connector tasks stopped")
 
     app = FastAPI(lifespan=lifespan)
@@ -359,6 +367,30 @@ def create_app(settings: Settings | None = None, config_dir: Optional[Path] = No
         bus: EventBus = app.state.bus
         await bus.publish_wire({"type": "unpin"})
         return {"status": "ok"}
+
+    def _desktop_running() -> bool:
+        proc = app.state.desktop_process
+        return proc is not None and proc.poll() is None
+
+    @app.get("/api/desktop/available")
+    async def api_desktop_available():
+        return {"available": desktop.is_available(), "running": _desktop_running()}
+
+    @app.post("/api/desktop/spawn")
+    async def api_desktop_spawn(request: Request):
+        if not desktop.is_available():
+            raise HTTPException(status_code=501, detail="PySide6 not installed")
+        if _desktop_running():
+            raise HTTPException(status_code=409, detail="desktop overlay already running")
+        base = str(request.base_url).rstrip("/") + "/"
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "app.desktop_client", base],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        app.state.desktop_process = proc
+        log.info("spawned desktop overlay subprocess pid=%d url=%s", proc.pid, base)
+        return {"status": "ok", "pid": proc.pid}
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:

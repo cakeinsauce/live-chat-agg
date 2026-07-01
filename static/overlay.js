@@ -14,6 +14,9 @@
   const chromeHidden = params.get("chrome") === "0" || obsLike;
   if (chromeHidden) document.body.classList.add("chrome-hidden");
 
+  const desktopMode = params.get("desktop") === "1";
+  if (desktopMode) document.body.classList.add("desktop");
+
   const chat = document.getElementById("chat");
   const statsEl = document.getElementById("stats");
   const pinnedEl = document.getElementById("pinned");
@@ -714,6 +717,9 @@
       document.body.classList.toggle("locked", locked);
       lockBtn.textContent = locked ? "\uD83D\uDD12" : "\uD83D\uDD13";
       lockBtn.title = locked ? "Unlock overlay" : "Lock overlay";
+      if (desktopMode) {
+        location.hash = (locked ? "lock-" : "unlock-") + Date.now();
+      }
     }
     apply(localStorage.getItem("overlay.locked") === "1");
     lockBtn.addEventListener("click", () => {
@@ -721,6 +727,36 @@
       localStorage.setItem("overlay.locked", next ? "1" : "0");
       apply(next);
     });
+  }
+
+  function initCloseButton() {
+    const btn = document.getElementById("close-btn");
+    if (!btn || !desktopMode) return;
+    btn.hidden = false;
+    btn.addEventListener("click", () => {
+      location.hash = "close-" + Date.now();
+    });
+  }
+
+  function initPopoutButton() {
+    const btn = document.getElementById("popout-btn");
+    if (!btn || desktopMode) return;
+    async function refresh() {
+      try {
+        const r = await fetch("/api/desktop/available");
+        if (!r.ok) return;
+        const j = await r.json();
+        btn.hidden = !(j.available && !j.running);
+      } catch (_) {}
+    }
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try { await fetch("/api/desktop/spawn", { method: "POST" }); } catch (_) {}
+      btn.disabled = false;
+      refresh();
+    });
+    refresh();
+    setInterval(refresh, 3000);
   }
 
   function initOpacity() {
@@ -749,6 +785,8 @@
   initComposer();
   initLock();
   initOpacity();
+  initCloseButton();
+  initPopoutButton();
   tickDuration();
   setInterval(tickDuration, 1000);
 })();

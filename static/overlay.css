@@ -114,6 +114,15 @@ body.bg-light {
   color: #fff;
 }
 
+.close-btn:hover {
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.15);
+}
+
+.popout-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .opacity-control {
   display: inline-flex;
   align-items: center;
@@ -815,5 +824,18 @@ body.locked #settings-link {
 
 body.chrome-hidden #lock-btn,
 body.chrome-hidden #settings-link {
+  display: none !important;
+}
+
+body.desktop .topbar {
+  cursor: move;
+}
+
+body.desktop .topbar-btn,
+body.desktop .opacity-control {
+  cursor: default;
+}
+
+body.desktop #popout-btn {
   display: none !important;
 }
